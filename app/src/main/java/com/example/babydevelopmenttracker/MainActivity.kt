@@ -87,7 +87,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -1341,6 +1341,7 @@ private fun OnboardingFlow(
     showPermissionRationale: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val totalSteps = 3
     var step by remember { mutableStateOf(0) }
     val defaultDueDate = remember(today) { today.plusWeeks(20) }
@@ -1537,7 +1538,7 @@ private fun OnboardingFlow(
                                 onConfirmDueDate(LocalDate.ofEpochDay(epochDay), true)
                                 step += 1
                             } else {
-                                partnerCodeError = stringResource(id = R.string.onboarding_partner_code_error)
+                                partnerCodeError = context.getString(R.string.onboarding_partner_code_error)
                             }
                         } else {
                             selectedDate?.let {

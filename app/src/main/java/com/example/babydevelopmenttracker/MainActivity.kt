@@ -1,10 +1,10 @@
 package com.example.babydevelopmenttracker
 
 import android.Manifest
-import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -91,6 +91,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
 import com.example.babydevelopmenttracker.data.FamilyRole
 import com.example.babydevelopmenttracker.data.PartnerInviteCode
 import com.example.babydevelopmenttracker.data.UserPreferences
@@ -104,15 +110,17 @@ import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.Identity
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -125,8 +133,31 @@ class MainActivity : ComponentActivity() {
 
 // Most anatomy scans that reveal a baby’s sex happen around week 18.
 private const val GENDER_REVEAL_WEEK = 18
+private const val GOOGLE_WEB_CLIENT_ID_PLACEHOLDER = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
 
 private enum class DrawerDestination { Home, Settings }
+
+private fun parseEmailFromIdToken(idToken: String?): String? {
+    if (idToken.isNullOrBlank()) {
+        return null
+    }
+    val segments = idToken.split('.')
+    if (segments.size < 2) {
+        return null
+    }
+
+    return try {
+        val payload = segments[1]
+        val decodedBytes = Base64.decode(
+            payload,
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        val payloadJson = JSONObject(String(decodedBytes, StandardCharsets.UTF_8))
+        payloadJson.optString("email").takeIf { it.isNotBlank() }
+    } catch (_: Exception) {
+        null
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -188,59 +219,108 @@ fun BabyDevelopmentTrackerScreen(
         }
     }
 
-    val googleSignInOptions = remember {
-        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
+    val credentialManager = remember(context) { CredentialManager.create(context) }
+    val googleIdentityClient = remember(context) { Identity.getSignInClient(context) }
+    val googleServerClientId = stringResource(id = R.string.google_sign_in_server_client_id)
+    val isGoogleSignInConfigured = remember(googleServerClientId) {
+        googleServerClientId.isNotBlank() &&
+            googleServerClientId != GOOGLE_WEB_CLIENT_ID_PLACEHOLDER
+    }
+    val googleCredentialOption = remember(googleServerClientId) {
+        GetSignInWithGoogleOption.Builder(googleServerClientId).build()
+    }
+    val googleCredentialRequest = remember(googleCredentialOption) {
+        GetCredentialRequest.Builder()
+            .addCredentialOption(googleCredentialOption)
             .build()
     }
-    val googleSignInClient = remember(googleSignInOptions) {
-        GoogleSignIn.getClient(context, googleSignInOptions)
-    }
     var googleSignInError by remember { mutableStateOf<String?>(null) }
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_CANCELED) {
+
+    val handleGoogleSignIn = remember(
+        credentialManager,
+        googleCredentialRequest,
+        isGoogleSignInConfigured
+    ) {
+        {
             googleSignInError = null
-            return@rememberLauncherForActivityResult
-        }
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            googleSignInError = null
-            scope.launch {
-                userPreferencesRepository.updateGoogleAccount(
-                    account.id,
-                    account.email,
-                    account.displayName
+            if (!isGoogleSignInConfigured) {
+                googleSignInError = context.getString(
+                    R.string.settings_account_sign_in_configuration_error
                 )
+            } else {
+                scope.launch {
+                    try {
+                        val response = credentialManager.getCredential(
+                            context,
+                            googleCredentialRequest
+                        )
+                        val credential = response.credential
+                        val googleCredential = when (credential) {
+                            is CustomCredential -> {
+                                when (credential.type) {
+                                    GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL,
+                                    GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_SIWG_CREDENTIAL -> {
+                                        GoogleIdTokenCredential.createFrom(credential.data)
+                                    }
+                                    else -> null
+                                }
+                            }
+                            else -> null
+                        }
+                        if (googleCredential == null) {
+                            googleSignInError = context.getString(
+                                R.string.settings_account_sign_in_error
+                            )
+                            return@launch
+                        }
+
+                        val accountId = googleCredential.id
+                        if (accountId.isBlank()) {
+                            googleSignInError = context.getString(
+                                R.string.settings_account_sign_in_missing_id_error
+                            )
+                            return@launch
+                        }
+
+                        val emailAddress = parseEmailFromIdToken(googleCredential.idToken)
+                        userPreferencesRepository.updateGoogleAccount(
+                            accountId = accountId,
+                            email = emailAddress,
+                            name = googleCredential.displayName
+                        )
+                    } catch (exception: GetCredentialCancellationException) {
+                        googleSignInError = null
+                    } catch (exception: GetCredentialException) {
+                        googleSignInError = context.getString(
+                            R.string.settings_account_sign_in_error
+                        )
+                    } catch (exception: Exception) {
+                        googleSignInError = context.getString(
+                            R.string.settings_account_sign_in_error
+                        )
+                    }
+                }
             }
-            Unit
-        } catch (exception: ApiException) {
-            googleSignInError = context.getString(R.string.settings_account_sign_in_error)
         }
     }
 
-    val handleGoogleSignIn = remember(googleSignInClient) {
+    val handleGoogleSignOut = remember(googleIdentityClient, credentialManager) {
         {
             googleSignInError = null
-            googleSignInLauncher.launch(googleSignInClient.signInIntent)
-        }
-    }
-    val handleGoogleSignOut = remember(googleSignInClient) {
-        {
-            googleSignInError = null
-            val signOutTask = googleSignInClient.signOut()
+            val signOutTask = googleIdentityClient.signOut()
             signOutTask.addOnCompleteListener {
                 scope.launch {
+                    try {
+                        credentialManager.clearCredentialState(ClearCredentialStateRequest())
+                    } catch (_: Exception) {
+                        // Ignore credential state clearing issues and continue clearing local state.
+                    }
                     userPreferencesRepository.clearGoogleAccount()
                 }
-                Unit
             }
             signOutTask.addOnFailureListener {
                 googleSignInError = context.getString(R.string.settings_account_sign_out_error)
             }
-            Unit
         }
     }
 
@@ -472,6 +552,7 @@ fun BabyDevelopmentTrackerScreen(
                         isGoogleAccountLinked = isGoogleAccountLinked,
                         googleAccountName = googleAccountName,
                         googleAccountEmail = googleAccountEmail,
+                        isGoogleSignInConfigured = isGoogleSignInConfigured,
                         onGoogleSignIn = handleGoogleSignIn,
                         onGoogleSignOut = handleGoogleSignOut,
                         inviteCode = inviteCode,
@@ -774,6 +855,7 @@ private fun SettingsContent(
     isGoogleAccountLinked: Boolean,
     googleAccountName: String?,
     googleAccountEmail: String?,
+    isGoogleSignInConfigured: Boolean,
     onGoogleSignIn: () -> Unit,
     onGoogleSignOut: () -> Unit,
     inviteCode: String?,
@@ -874,11 +956,20 @@ private fun SettingsContent(
                 )
                 Button(
                     onClick = onGoogleSignIn,
+                    enabled = isGoogleSignInConfigured,
                     modifier = Modifier
                         .padding(top = 16.dp)
                         .fillMaxWidth()
                 ) {
                     Text(text = stringResource(id = R.string.settings_account_sign_in_button))
+                }
+                if (!isGoogleSignInConfigured) {
+                    Text(
+                        text = stringResource(id = R.string.settings_account_sign_in_configuration_error),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
             googleSignInError?.let { error ->

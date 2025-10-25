@@ -1,7 +1,6 @@
 package com.example.babydevelopmenttracker
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
@@ -164,7 +163,7 @@ private fun parseEmailFromIdToken(idToken: String?): String? {
 
 private suspend fun requestGoogleIdTokenCredential(
     credentialManager: CredentialManager,
-    activityContext: Activity,
+    activityContext: ComponentActivity,
     requests: List<GetCredentialRequest>
 ): GoogleIdTokenCredential? {
     var lastCredentialException: GetCredentialException? = null
@@ -197,8 +196,8 @@ private suspend fun requestGoogleIdTokenCredential(
     return null
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
+private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
+    is ComponentActivity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
@@ -329,7 +328,7 @@ fun BabyDevelopmentTrackerScreen(
                 )
             } else if (activityContext == null) {
                 googleSignInError = context.getString(
-                    R.string.settings_account_sign_in_error
+                    R.string.settings_account_sign_in_configuration_error
                 )
             } else {
                 scope.launch {

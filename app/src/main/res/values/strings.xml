@@ -23,10 +23,10 @@
     <string name="notification_channel_name">Weekly check-ins</string>
     <string name="notification_channel_description">Reminders to open the app and view your current pregnancy week.</string>
     <string name="notification_title">Week %1$d check-in is ready</string>
-    <string name="notification_body_with_tip">This week\'s highlight: %1$s</string>
+    <string name="notification_body_with_tip">This week's highlight: %1$s</string>
     <string name="notification_body_generic">Open the app to explore the latest week-by-week guidance.</string>
     <string name="growth_trends_heading">Growth trends</string>
-    <string name="growth_trends_overview">Visualize how baby\'s size evolves each week.</string>
+    <string name="growth_trends_overview">Visualize how baby's size evolves each week.</string>
     <string name="growth_trends_length">Estimated length: %1$.1f cm</string>
     <string name="growth_trends_weight">Estimated weight: %1$,d g</string>
     <string name="home_greeting">Hello, %1$s!</string>

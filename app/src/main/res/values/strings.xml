@@ -10,4 +10,12 @@
     <string name="estimated_week_label">Estimated week: %1$d</string>
     <string name="date_picker_confirm">Save</string>
     <string name="date_picker_cancel">Cancel</string>
+    <string name="reminder_toggle_title">Weekly reminders</string>
+    <string name="reminder_toggle_description">Get a gentle nudge to review the latest pregnancy insights each week.</string>
+    <string name="notifications_permission_rationale">Turn on notifications in system settings to receive weekly check-ins.</string>
+    <string name="notification_channel_name">Weekly check-ins</string>
+    <string name="notification_channel_description">Reminders to open the app and view your current pregnancy week.</string>
+    <string name="notification_title">Week %1$d check-in is ready</string>
+    <string name="notification_body_with_tip">This week's highlight: %1$s</string>
+    <string name="notification_body_generic">Open the app to explore the latest week-by-week guidance.</string>
 </resources>

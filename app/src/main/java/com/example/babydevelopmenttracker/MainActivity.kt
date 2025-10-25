@@ -1,11 +1,17 @@
 package com.example.babydevelopmenttracker
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +28,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -29,26 +37,33 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.example.babydevelopmenttracker.data.ReminderPreferences
+import com.example.babydevelopmenttracker.data.ReminderPreferencesRepository
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
 import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
+import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,12 +84,21 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BabyDevelopmentTrackerScreen() {
+    val context = LocalContext.current
+    val reminderRepository = remember(context) { ReminderPreferencesRepository(context) }
+    val reminderScheduler = remember(context) { WeeklyReminderScheduler(context) }
+    val reminderPreferences by reminderRepository.reminderPreferences.collectAsState(
+        initial = ReminderPreferences()
+    )
+    val scope = rememberCoroutineScope()
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
     var selectedWeek by remember { mutableStateOf(20) }
-    var dueDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    val dueDateEpochDay = reminderPreferences.dueDateEpochDay
+    val remindersEnabled = reminderPreferences.remindersEnabled
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
     var showDatePicker by remember { mutableStateOf(false) }
+    var showPermissionRationale by remember { mutableStateOf(false) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
 
     val calculatedWeek = dueDate?.let { calculateWeekFromDueDate(it, today) }
@@ -83,7 +107,28 @@ fun BabyDevelopmentTrackerScreen() {
         calculatedWeek?.let { selectedWeek = it }
     }
 
+    LaunchedEffect(remindersEnabled, dueDateEpochDay) {
+        if (remindersEnabled) {
+            reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
+        } else {
+            reminderScheduler.cancelWeeklyReminder()
+        }
+    }
+
     val weekInfo = BabyDevelopmentRepository.findWeek(selectedWeek)
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            showPermissionRationale = false
+            scope.launch {
+                reminderRepository.updateReminderEnabled(true)
+            }
+        } else {
+            showPermissionRationale = true
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -149,6 +194,69 @@ fun BabyDevelopmentTrackerScreen() {
                     activeTrackColor = MaterialTheme.colorScheme.primary
                 ),
             )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.reminder_toggle_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = stringResource(id = R.string.reminder_toggle_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                Switch(
+                    checked = remindersEnabled,
+                    onCheckedChange = { isChecked ->
+                        if (isChecked) {
+                            val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                ) != PackageManager.PERMISSION_GRANTED
+
+                            if (needsPermission) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                showPermissionRationale = false
+                                scope.launch {
+                                    reminderRepository.updateReminderEnabled(true)
+                                    reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
+                                }
+                            }
+                        } else {
+                            showPermissionRationale = false
+                            scope.launch {
+                                reminderRepository.updateReminderEnabled(false)
+                                reminderScheduler.cancelWeeklyReminder()
+                            }
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+            }
+
+            if (showPermissionRationale) {
+                Text(
+                    text = stringResource(id = R.string.notifications_permission_rationale),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+            }
         }
 
         weekInfo?.let { info ->
@@ -244,7 +352,13 @@ fun BabyDevelopmentTrackerScreen() {
                             val selectedDate = Instant.ofEpochMilli(selectedMillis)
                                 .atZone(zoneId)
                                 .toLocalDate()
-                            dueDateEpochDay = selectedDate.toEpochDay()
+                            scope.launch {
+                                val epochDay = selectedDate.toEpochDay()
+                                reminderRepository.updateDueDate(epochDay)
+                                if (remindersEnabled) {
+                                    reminderScheduler.scheduleWeeklyReminder(epochDay)
+                                }
+                            }
                         }
                         showDatePicker = false
                     }

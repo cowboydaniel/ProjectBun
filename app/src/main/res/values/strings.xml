@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Baby Development Tracker</string>
+    <string name="week_selector_label">Week %1$d</string>
+    <string name="development_heading">Current Highlights</string>
+    <string name="symptoms_heading">Parent Experience</string>
+    <string name="tips_heading">Tips</string>
+</resources>

@@ -490,19 +490,21 @@ private fun HomeContent(
                     )
                 }
             }
-            item {
-                HighlightCard(
-                    title = stringResource(id = R.string.tips_heading),
-                    highlights = info.tips
-                )
-            }
-            item {
-                ChecklistCard(
-                    title = stringResource(id = R.string.doctor_checklist_heading),
-                    subtitle = stringResource(id = R.string.doctor_checklist_description),
-                    emptyStateText = stringResource(id = R.string.doctor_checklist_empty),
-                    items = doctorChecklist
-                )
+            if (!isPartnerRole) {
+                item {
+                    HighlightCard(
+                        title = stringResource(id = R.string.tips_heading),
+                        highlights = info.tips
+                    )
+                }
+                item {
+                    ChecklistCard(
+                        title = stringResource(id = R.string.doctor_checklist_heading),
+                        subtitle = stringResource(id = R.string.doctor_checklist_description),
+                        emptyStateText = stringResource(id = R.string.doctor_checklist_empty),
+                        items = doctorChecklist
+                    )
+                }
             }
             if (isPartnerRole) {
                 item {

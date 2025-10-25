@@ -190,6 +190,7 @@ fun BabyDevelopmentTrackerScreen(
 
     val googleSignInOptions = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestId()
             .requestEmail()
             .build()
     }

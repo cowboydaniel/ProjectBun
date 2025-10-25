@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -20,13 +21,15 @@ internal object UserPreferencesKeys {
     val DUE_DATE_EPOCH_DAY = longPreferencesKey("due_date_epoch_day")
     val FAMILY_ROLE = stringPreferencesKey("family_role")
     val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+    val THEME_PREFERENCE = stringPreferencesKey("theme_preference")
 }
 
 data class UserPreferences(
     val dueDateEpochDay: Long? = null,
     val remindersEnabled: Boolean = false,
     val familyRole: FamilyRole? = null,
-    val onboardingCompleted: Boolean = false
+    val onboardingCompleted: Boolean = false,
+    val themePreference: ThemePreference = ThemePreference.Neutral
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -37,7 +40,10 @@ class UserPreferencesRepository(private val context: Context) {
                 dueDateEpochDay = preferences[UserPreferencesKeys.DUE_DATE_EPOCH_DAY],
                 remindersEnabled = preferences[UserPreferencesKeys.REMINDER_ENABLED] ?: false,
                 familyRole = FamilyRole.fromStorageValue(preferences[UserPreferencesKeys.FAMILY_ROLE]),
-                onboardingCompleted = preferences[UserPreferencesKeys.ONBOARDING_COMPLETED] ?: false
+                onboardingCompleted = preferences[UserPreferencesKeys.ONBOARDING_COMPLETED] ?: false,
+                themePreference = ThemePreference.fromStorageValue(
+                    preferences[UserPreferencesKeys.THEME_PREFERENCE]
+                )
             )
         }
 
@@ -70,6 +76,12 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateOnboardingCompleted(completed: Boolean) {
         context.userPreferencesDataStore.edit { preferences ->
             preferences[UserPreferencesKeys.ONBOARDING_COMPLETED] = completed
+        }
+    }
+
+    suspend fun updateThemePreference(themePreference: ThemePreference) {
+        context.userPreferencesDataStore.edit { preferences ->
+            preferences[UserPreferencesKeys.THEME_PREFERENCE] = themePreference.storageValue
         }
     }
 }

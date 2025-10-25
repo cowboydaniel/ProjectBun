@@ -110,6 +110,7 @@ import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import java.nio.charset.StandardCharsets
@@ -224,12 +225,19 @@ fun BabyDevelopmentTrackerScreen(
         googleServerClientId.isNotBlank() &&
             googleServerClientId != GOOGLE_WEB_CLIENT_ID_PLACEHOLDER
     }
-    val googleCredentialOption = remember(googleServerClientId) {
+    val googleSignInWithGoogleOption = remember(googleServerClientId) {
         GetSignInWithGoogleOption.Builder(googleServerClientId).build()
     }
-    val googleCredentialRequest = remember(googleCredentialOption) {
+    val googleIdOption = remember(googleServerClientId) {
+        GetGoogleIdOption.Builder()
+            .setServerClientId(googleServerClientId)
+            .setFilterByAuthorizedAccounts(false)
+            .build()
+    }
+    val googleCredentialRequest = remember(googleSignInWithGoogleOption, googleIdOption) {
         GetCredentialRequest.Builder()
-            .addCredentialOption(googleCredentialOption)
+            .addCredentialOption(googleSignInWithGoogleOption)
+            .addCredentialOption(googleIdOption)
             .build()
     }
     var googleSignInError by remember { mutableStateOf<String?>(null) }

@@ -284,7 +284,8 @@ fun BabyDevelopmentTrackerScreen() {
                         dueDate = dueDate,
                         dateFormatter = dateFormatter,
                         calculatedWeek = calculatedWeek,
-                        familyRole = familyRole
+                        familyRole = familyRole,
+                        remindersEnabled = remindersEnabled
                     )
                     DrawerDestination.Settings -> SettingsContent(
                         modifier = Modifier.padding(innerPadding),
@@ -358,6 +359,7 @@ private fun HomeContent(
     dateFormatter: DateTimeFormatter,
     calculatedWeek: Int?,
     familyRole: FamilyRole?,
+    remindersEnabled: Boolean,
 ) {
     val weekInfo = remember(selectedWeek) { BabyDevelopmentRepository.findWeek(selectedWeek) }
     val doctorChecklist = remember(selectedWeek) {
@@ -365,6 +367,9 @@ private fun HomeContent(
     }
     val partnerSupport = remember(selectedWeek) {
         BabyDevelopmentRepository.partnerSupportForWeek(selectedWeek)
+    }
+    val isPartnerRole = remember(familyRole) {
+        familyRole == FamilyRole.PARTNER_SUPPORTER
     }
 
     LazyColumn(
@@ -402,6 +407,18 @@ private fun HomeContent(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 4.dp)
                 )
+                if (isPartnerRole) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    CompanionModeBanner(
+                        dueDate = dueDate,
+                        dateFormatter = dateFormatter,
+                        remindersEnabled = remindersEnabled,
+                        calculatedWeek = calculatedWeek
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 calculatedWeek?.let { week ->
                     Text(
                         text = stringResource(id = R.string.estimated_week_label, week),
@@ -443,17 +460,35 @@ private fun HomeContent(
         }
 
         weekInfo?.let { info ->
-            item {
-                HighlightCard(
-                    title = stringResource(id = R.string.development_heading),
-                    highlights = info.babyHighlights
-                )
-            }
-            item {
-                HighlightCard(
-                    title = stringResource(id = R.string.symptoms_heading),
-                    highlights = info.parentChanges
-                )
+            if (isPartnerRole) {
+                item {
+                    SupporterInsightCard(parentHighlights = info.parentChanges)
+                }
+                item {
+                    val firstHighlight = info.babyHighlights.firstOrNull()
+                        ?: stringResource(id = R.string.partner_baby_overview_default)
+                    val babyOverviewHighlights = listOf(
+                        firstHighlight,
+                        stringResource(id = R.string.partner_baby_overview_prompt)
+                    )
+                    HighlightCard(
+                        title = stringResource(id = R.string.partner_baby_overview_heading),
+                        highlights = babyOverviewHighlights
+                    )
+                }
+            } else {
+                item {
+                    HighlightCard(
+                        title = stringResource(id = R.string.development_heading),
+                        highlights = info.babyHighlights
+                    )
+                }
+                item {
+                    HighlightCard(
+                        title = stringResource(id = R.string.symptoms_heading),
+                        highlights = info.parentChanges
+                    )
+                }
             }
             item {
                 HighlightCard(
@@ -469,13 +504,15 @@ private fun HomeContent(
                     items = doctorChecklist
                 )
             }
-            item {
-                PartnerSupportCard(
-                    title = stringResource(id = R.string.partner_support_heading),
-                    subtitle = stringResource(id = R.string.partner_support_description),
-                    emptyStateText = stringResource(id = R.string.partner_support_empty),
-                    items = partnerSupport
-                )
+            if (isPartnerRole) {
+                item {
+                    PartnerSupportCard(
+                        title = stringResource(id = R.string.partner_support_heading),
+                        subtitle = stringResource(id = R.string.partner_support_description),
+                        emptyStateText = stringResource(id = R.string.partner_support_empty),
+                        items = partnerSupport
+                    )
+                }
             }
             item {
                 GrowthTrendCard(selectedWeek = selectedWeek)
@@ -888,6 +925,44 @@ private fun OnboardingFlow(
 }
 
 @Composable
+fun SupporterInsightCard(parentHighlights: List<String>) {
+    val highlights = if (parentHighlights.isNotEmpty()) {
+        parentHighlights
+    } else {
+        BabyDevelopmentRepository.DEFAULT_PARENT_CHANGES
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(id = R.string.partner_parent_focus_heading),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(id = R.string.partner_parent_focus_summary),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            highlights.forEachIndexed { index, highlight ->
+                Text(
+                    text = "• $highlight",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = if (index == 0) Modifier else Modifier.padding(top = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun HighlightCard(title: String, highlights: List<String>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1030,6 +1105,64 @@ fun PartnerSupportCard(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompanionModeBanner(
+    dueDate: LocalDate?,
+    dateFormatter: DateTimeFormatter,
+    remindersEnabled: Boolean,
+    calculatedWeek: Int?,
+    modifier: Modifier = Modifier
+) {
+    val dueDateText = dueDate?.format(dateFormatter)
+    val statusText = when {
+        dueDateText == null -> stringResource(id = R.string.companion_banner_message_no_due_date)
+        remindersEnabled -> stringResource(
+            id = R.string.companion_banner_message_due_date_active,
+            dueDateText
+        )
+        else -> stringResource(
+            id = R.string.companion_banner_message_due_date_inactive,
+            dueDateText
+        )
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(id = R.string.companion_banner_title),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.padding(start = 12.dp)
+                )
+            }
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            if (calculatedWeek != null) {
+                Text(
+                    text = stringResource(id = R.string.companion_banner_week_context, calculatedWeek),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
     }

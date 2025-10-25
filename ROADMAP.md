@@ -17,7 +17,7 @@ Empower new and expecting parents with a trustworthy, delightful Android compani
 - [ ] Ship offline-first caching for core weekly content with background refresh once connectivity returns.
 
 ### Wave 2 – Support Network Amplification
-- Launch partner companion mode with synchronized reminders and custom tips for supporters.
+- [x] Launch partner companion mode with synchronized reminders and custom tips for supporters.
 - Add lightweight journaling with mood tracking and exportable PDF summaries for prenatal visits.
 - Integrate with Google Calendar to surface upcoming appointments and recommended scheduling windows.
 - Pilot expert-led live sessions (Q&A, prenatal yoga) with RSVP and post-session recap modules.

@@ -10,6 +10,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.babydevelopmenttracker.MainActivity
 import com.example.babydevelopmenttracker.R
+import com.example.babydevelopmenttracker.data.FamilyRole
 import com.example.babydevelopmenttracker.data.UserPreferencesKeys
 import com.example.babydevelopmenttracker.data.userPreferencesDataStore
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
@@ -43,11 +44,20 @@ class WeeklyReminderWorker(
         val weekFromDueDate = dueDate?.let { calculateWeekFromDueDate(it, today) }
         val targetWeek = weekFromDueDate ?: BabyDevelopmentRepository.weeks.first().week
         val weekInfo = BabyDevelopmentRepository.findWeek(targetWeek)
+        val familyRoleValue = preferences[UserPreferencesKeys.FAMILY_ROLE]
+        val familyRole = FamilyRole.fromStorageValue(familyRoleValue)
+        val isPartnerSupporter = familyRole == FamilyRole.PARTNER_SUPPORTER
 
         val context = applicationContext
-        val contentText = weekInfo?.babyHighlights?.firstOrNull()?.let { highlight ->
-            context.getString(R.string.notification_body_with_tip, highlight)
-        } ?: context.getString(R.string.notification_body_generic)
+        val contentText = if (isPartnerSupporter) {
+            val partnerTip = BabyDevelopmentRepository.partnerSupportForWeek(targetWeek).firstOrNull()
+            partnerTip?.let { context.getString(R.string.notification_body_partner_tip, it) }
+                ?: context.getString(R.string.notification_body_generic)
+        } else {
+            weekInfo?.babyHighlights?.firstOrNull()?.let { highlight ->
+                context.getString(R.string.notification_body_with_tip, highlight)
+            } ?: context.getString(R.string.notification_body_generic)
+        }
 
         val title = context.getString(R.string.notification_title, targetWeek)
 

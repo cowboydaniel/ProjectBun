@@ -229,15 +229,16 @@ fun BabyDevelopmentTrackerScreen(
     val handleGoogleSignOut = remember(googleSignInClient) {
         {
             googleSignInError = null
-            googleSignInClient.signOut()
-                .addOnCompleteListener {
-                    scope.launch {
-                        userPreferencesRepository.clearGoogleAccount()
-                    }
+            val signOutTask = googleSignInClient.signOut()
+            signOutTask.addOnCompleteListener {
+                scope.launch {
+                    userPreferencesRepository.clearGoogleAccount()
                 }
-                .addOnFailureListener {
-                    googleSignInError = context.getString(R.string.settings_account_sign_out_error)
-                }
+            }
+            signOutTask.addOnFailureListener {
+                googleSignInError = context.getString(R.string.settings_account_sign_out_error)
+            }
+            Unit
         }
     }
 

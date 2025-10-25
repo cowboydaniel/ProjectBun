@@ -112,7 +112,6 @@ import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.gms.auth.api.identity.Identity
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.LocalDate
@@ -220,7 +219,6 @@ fun BabyDevelopmentTrackerScreen(
     }
 
     val credentialManager = remember(context) { CredentialManager.create(context) }
-    val googleIdentityClient = remember(context) { Identity.getSignInClient(context) }
     val googleServerClientId = stringResource(id = R.string.google_sign_in_server_client_id)
     val isGoogleSignInConfigured = remember(googleServerClientId) {
         googleServerClientId.isNotBlank() &&
@@ -304,22 +302,17 @@ fun BabyDevelopmentTrackerScreen(
         }
     }
 
-    val handleGoogleSignOut: () -> Unit = remember(googleIdentityClient, credentialManager) {
+    val handleGoogleSignOut: () -> Unit = remember(credentialManager) {
         {
             googleSignInError = null
-            val signOutTask = googleIdentityClient.signOut()
-            signOutTask.addOnCompleteListener {
-                scope.launch {
-                    try {
-                        credentialManager.clearCredentialState(ClearCredentialStateRequest())
-                    } catch (_: Exception) {
-                        // Ignore credential state clearing issues and continue clearing local state.
-                    }
-                    userPreferencesRepository.clearGoogleAccount()
+            scope.launch {
+                val signOutResult = runCatching {
+                    credentialManager.clearCredentialState(ClearCredentialStateRequest())
                 }
-            }
-            signOutTask.addOnFailureListener {
-                googleSignInError = context.getString(R.string.settings_account_sign_out_error)
+                if (signOutResult.isFailure) {
+                    googleSignInError = context.getString(R.string.settings_account_sign_out_error)
+                }
+                userPreferencesRepository.clearGoogleAccount()
             }
         }
     }

@@ -708,6 +708,7 @@ private fun SettingsContent(
     val isPartnerRole = familyRole == FamilyRole.PARTNER_SUPPORTER
     var partnerCodeInput by rememberSaveable { mutableStateOf("") }
     var inviteCopied by rememberSaveable { mutableStateOf(false) }
+    val hasDueDate = dueDate != null
 
     LaunchedEffect(partnerCodeSuccessMessage) {
         if (partnerCodeSuccessMessage != null) {
@@ -754,57 +755,59 @@ private fun SettingsContent(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                when {
-                    inviteCode == null -> {
-                        Text(
-                            text = stringResource(id = R.string.settings_partner_invite_requirements_due_date),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 12.dp)
-                        )
-                    }
-                    else -> {
-                        Surface(
+                if (!hasDueDate || inviteCode == null) {
+                    Text(
+                        text = stringResource(id = R.string.settings_partner_invite_requirements_due_date),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 16.dp),
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = stringResource(
-                                        id = R.string.settings_partner_invite_code_label,
-                                        inviteCode
-                                    ),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.weight(1f, fill = false)
+                            Text(
+                                text = stringResource(
+                                    id = R.string.settings_partner_invite_code_label,
+                                    inviteCode
+                                ),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            IconButton(onClick = {
+                                clipboardManager.setText(AnnotatedString(inviteCode))
+                                inviteCopied = true
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Filled.ContentCopy,
+                                    contentDescription = stringResource(id = R.string.settings_partner_invite_copy)
                                 )
-                                IconButton(onClick = {
-                                    clipboardManager.setText(AnnotatedString(inviteCode))
-                                    inviteCopied = true
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ContentCopy,
-                                        contentDescription = stringResource(id = R.string.settings_partner_invite_copy)
-                                    )
-                                }
                             }
                         }
-                        if (inviteCopied) {
-                            Text(
-                                text = stringResource(id = R.string.settings_partner_invite_copy_confirmation),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                        }
+                    }
+                    Text(
+                        text = stringResource(id = R.string.settings_partner_invite_helper_text),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                    if (inviteCopied) {
+                        Text(
+                            text = stringResource(id = R.string.settings_partner_invite_copy_confirmation),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
                 }
 

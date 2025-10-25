@@ -6,10 +6,10 @@ Deliver an approachable Android companion for expectant parents that provides ti
 ## Milestones
 
 ### ✅ Phase 1 – Core Experience (MVP)
-- Implement week-by-week content covering pregnancy weeks 4–42.
-- Provide curated highlights for baby development, parent changes, and actionable tips per week.
-- Support light and dark Material 3 theming with dynamic color on Android 12+.
-- Ensure app builds and runs on API level 24 and higher.
+- [x] Implement week-by-week content covering pregnancy weeks 4–42.
+- [ ] Provide curated highlights for baby development, parent changes, and actionable tips per week.
+- [ ] Support light and dark Material 3 theming with dynamic color on Android 12+.
+- [ ] Ensure app builds and runs on API level 24 and higher.
 
 ### 🔄 Phase 2 – Engagement & Accessibility
 - Add bookmarking/favorites so users can mark specific weeks or tips for quick reference.

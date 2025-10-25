@@ -215,6 +215,7 @@ fun BabyDevelopmentTrackerScreen(
                     account.displayName
                 )
             }
+            Unit
         } catch (exception: ApiException) {
             googleSignInError = context.getString(R.string.settings_account_sign_in_error)
         }
@@ -234,6 +235,7 @@ fun BabyDevelopmentTrackerScreen(
                 scope.launch {
                     userPreferencesRepository.clearGoogleAccount()
                 }
+                Unit
             }
             signOutTask.addOnFailureListener {
                 googleSignInError = context.getString(R.string.settings_account_sign_out_error)
@@ -266,9 +268,11 @@ fun BabyDevelopmentTrackerScreen(
                         reminderScheduler.scheduleWeeklyReminder(epochDay)
                     }
                 }
+                Unit
             } else {
                 partnerCodeError = context.getString(R.string.settings_partner_code_error)
             }
+            Unit
         }
     }
 
@@ -305,9 +309,11 @@ fun BabyDevelopmentTrackerScreen(
                 userPreferencesRepository.updateReminderEnabled(true)
                 reminderScheduler.scheduleWeeklyReminder(userPreferences.dueDateEpochDay)
             }
+            Unit
         } else {
             showPermissionRationale = true
         }
+        Unit
     }
 
     val handleReminderToggle: (Boolean) -> Unit = { isChecked ->
@@ -326,6 +332,7 @@ fun BabyDevelopmentTrackerScreen(
                     userPreferencesRepository.updateReminderEnabled(true)
                     reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
                 }
+                Unit
             }
         } else {
             showPermissionRationale = false
@@ -333,7 +340,9 @@ fun BabyDevelopmentTrackerScreen(
                 userPreferencesRepository.updateReminderEnabled(false)
                 reminderScheduler.cancelWeeklyReminder()
             }
+            Unit
         }
+        Unit
     }
 
     if (!onboardingCompleted) {
@@ -346,6 +355,7 @@ fun BabyDevelopmentTrackerScreen(
             onSelectFamilyRole = { role ->
                 showPermissionRationale = false
                 scope.launch { userPreferencesRepository.updateFamilyRole(role) }
+                Unit
             },
             onConfirmDueDate = { date, fromPartnerInvite ->
                 scope.launch {
@@ -355,10 +365,12 @@ fun BabyDevelopmentTrackerScreen(
                         reminderScheduler.scheduleWeeklyReminder(epochDay)
                     }
                 }
+                Unit
             },
             onReminderToggle = handleReminderToggle,
             onFinish = {
                 scope.launch { userPreferencesRepository.updateOnboardingCompleted(true) }
+                Unit
             },
             showPermissionRationale = showPermissionRationale
         )
@@ -378,6 +390,7 @@ fun BabyDevelopmentTrackerScreen(
                         onClick = {
                             currentDestination = DrawerDestination.Home
                             scope.launch { drawerState.close() }
+                            Unit
                         },
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                     )
@@ -387,6 +400,7 @@ fun BabyDevelopmentTrackerScreen(
                         onClick = {
                             currentDestination = DrawerDestination.Settings
                             scope.launch { drawerState.close() }
+                            Unit
                         },
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                     )
@@ -404,7 +418,10 @@ fun BabyDevelopmentTrackerScreen(
                         },
                         navigationIcon = {
                             IconButton(
-                                onClick = { scope.launch { drawerState.open() } }
+                                onClick = {
+                                    scope.launch { drawerState.open() }
+                                    Unit
+                                }
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Menu,
@@ -443,12 +460,14 @@ fun BabyDevelopmentTrackerScreen(
                         familyRole = familyRole,
                         onFamilyRoleSelected = { role ->
                             scope.launch { userPreferencesRepository.updateFamilyRole(role) }
+                            Unit
                         },
                         themePreference = themePreference,
                         onThemePreferenceSelected = { preference ->
                             scope.launch {
                                 userPreferencesRepository.updateThemePreference(preference)
                             }
+                            Unit
                         },
                         isGoogleAccountLinked = isGoogleAccountLinked,
                         googleAccountName = googleAccountName,
@@ -461,6 +480,7 @@ fun BabyDevelopmentTrackerScreen(
                             scope.launch {
                                 userPreferencesRepository.updatePartnerLinkApproved(approved)
                             }
+                            Unit
                         },
                         onPartnerCodeSubmit = handlePartnerCodeSubmit,
                         onPartnerCodeInputChanged = clearPartnerCodeStatus,
@@ -499,6 +519,7 @@ fun BabyDevelopmentTrackerScreen(
                                         reminderScheduler.scheduleWeeklyReminder(epochDay)
                                     }
                                 }
+                                Unit
                             }
                             showDatePicker = false
                         }

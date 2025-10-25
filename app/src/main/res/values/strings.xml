@@ -4,4 +4,10 @@
     <string name="development_heading">Current Highlights</string>
     <string name="symptoms_heading">Parent Experience</string>
     <string name="tips_heading">Tips</string>
+    <string name="select_due_date">Select due date</string>
+    <string name="selected_due_date_label">Due date: %1$s</string>
+    <string name="due_date_prompt">Choose a due date to jump to the current week.</string>
+    <string name="estimated_week_label">Estimated week: %1$d</string>
+    <string name="date_picker_confirm">Save</string>
+    <string name="date_picker_cancel">Cancel</string>
 </resources>

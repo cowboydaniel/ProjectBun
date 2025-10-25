@@ -32,6 +32,16 @@
     <string name="home_settings_hint">Manage your due date and reminders from Settings.</string>
     <string name="settings_due_date_title">Due date</string>
     <string name="settings_due_date_description">Set your due date to personalize weekly highlights.</string>
+    <string name="settings_theme_title">App colors</string>
+    <string name="settings_theme_description">Pick a palette that matches your journey. Gender reveal themes unlock once you reach the ultrasound window.</string>
+    <string name="settings_theme_locked_message_due_date">Add your due date to unlock gender reveal themes later in pregnancy.</string>
+    <string name="settings_theme_locked_message_week">Gender reveal themes unlock around week %1$d when many parents learn the baby’s sex.</string>
+    <string name="theme_option_neutral_title">Neutral glow</string>
+    <string name="theme_option_neutral_description">Soft lavender and lilac that feel cozy before the big reveal.</string>
+    <string name="theme_option_blossom_title">Blossom</string>
+    <string name="theme_option_blossom_description">Rosy highlights for celebrating traditionally feminine vibes.</string>
+    <string name="theme_option_skyline_title">Skyline</string>
+    <string name="theme_option_skyline_description">Cool blues inspired by a classic gender reveal moment.</string>
     <string name="settings_notifications_title">Notifications</string>
     <string name="notification_channel_name">Weekly check-ins</string>
     <string name="notification_channel_description">Reminders to open the app and view your current pregnancy week.</string>

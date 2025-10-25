@@ -14,8 +14,9 @@ An Android application built with Jetpack Compose that helps expectant parents e
 
 1. Open the project in [Android Studio](https://developer.android.com/studio).
 2. Sync Gradle when prompted to download dependencies.
-3. Connect an Android device or start an emulator running Android 7.0 (API 24) or higher.
-4. Build and run the **Baby Development Tracker** app.
+3. In the **Run/Debug Configurations** dialog, press **+ → Android App**, choose the `app` module, and set the launch option to **Open Select Deployment Target Dialog** so you can pick a device each time. Save the configuration (for example, name it `Baby Development Tracker`).
+4. Connect an Android device with USB debugging enabled or start an emulator running Android 7.0 (API 24) or higher, then select it from the deployment target dialog.
+5. Use the new run configuration to build and run the **Baby Development Tracker** app.
 
 ## Tech Stack
 

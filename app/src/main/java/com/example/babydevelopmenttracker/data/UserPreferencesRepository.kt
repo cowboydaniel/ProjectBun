@@ -24,6 +24,9 @@ internal object UserPreferencesKeys {
     val THEME_PREFERENCE = stringPreferencesKey("theme_preference")
     val DUE_DATE_FROM_PARTNER = booleanPreferencesKey("due_date_from_partner")
     val PARTNER_LINK_APPROVED = booleanPreferencesKey("partner_link_approved")
+    val FAMILY_LINK_ID = stringPreferencesKey("family_link_id")
+    val FAMILY_LINK_SECRET = stringPreferencesKey("family_link_secret")
+    val DEVICE_AUTH_TOKEN = stringPreferencesKey("device_auth_token")
 }
 
 data class UserPreferences(
@@ -33,7 +36,10 @@ data class UserPreferences(
     val onboardingCompleted: Boolean = false,
     val themePreference: ThemePreference = ThemePreference.Neutral,
     val dueDateFromPartnerInvite: Boolean = false,
-    val partnerLinkApproved: Boolean = false
+    val partnerLinkApproved: Boolean = false,
+    val familyLinkId: String? = null,
+    val familyLinkSecret: String? = null,
+    val deviceAuthToken: String? = null
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -50,7 +56,10 @@ class UserPreferencesRepository(private val context: Context) {
                 ),
                 dueDateFromPartnerInvite =
                     preferences[UserPreferencesKeys.DUE_DATE_FROM_PARTNER] ?: false,
-                partnerLinkApproved = preferences[UserPreferencesKeys.PARTNER_LINK_APPROVED] ?: false
+                partnerLinkApproved = preferences[UserPreferencesKeys.PARTNER_LINK_APPROVED] ?: false,
+                familyLinkId = preferences[UserPreferencesKeys.FAMILY_LINK_ID],
+                familyLinkSecret = preferences[UserPreferencesKeys.FAMILY_LINK_SECRET],
+                deviceAuthToken = preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN]
             )
         }
 
@@ -97,6 +106,32 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updatePartnerLinkApproved(approved: Boolean) {
         context.userPreferencesDataStore.edit { preferences ->
             preferences[UserPreferencesKeys.PARTNER_LINK_APPROVED] = approved
+        }
+    }
+
+    suspend fun updateFamilyLink(familyId: String?, familySecret: String?) {
+        context.userPreferencesDataStore.edit { preferences ->
+            if (familyId.isNullOrEmpty()) {
+                preferences.remove(UserPreferencesKeys.FAMILY_LINK_ID)
+            } else {
+                preferences[UserPreferencesKeys.FAMILY_LINK_ID] = familyId
+            }
+
+            if (familySecret.isNullOrEmpty()) {
+                preferences.remove(UserPreferencesKeys.FAMILY_LINK_SECRET)
+            } else {
+                preferences[UserPreferencesKeys.FAMILY_LINK_SECRET] = familySecret
+            }
+        }
+    }
+
+    suspend fun updateDeviceAuthToken(token: String?) {
+        context.userPreferencesDataStore.edit { preferences ->
+            if (token.isNullOrEmpty()) {
+                preferences.remove(UserPreferencesKeys.DEVICE_AUTH_TOKEN)
+            } else {
+                preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN] = token
+            }
         }
     }
 }

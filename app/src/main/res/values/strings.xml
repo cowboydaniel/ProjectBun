@@ -15,6 +15,11 @@
     <string name="partner_support_heading">Partner support ideas</string>
     <string name="partner_support_description">Small gestures to keep you connected and helpful today.</string>
     <string name="partner_support_empty">Check in and ask what kind of support would feel best right now.</string>
+    <string name="companion_banner_title">Companion mode is syncing</string>
+    <string name="companion_banner_message_due_date_active">We’ll send weekly nudges leading up to %1$s so you stay aligned with the pregnancy.</string>
+    <string name="companion_banner_message_due_date_inactive">Due date %1$s is saved. Turn on weekly reminders in Settings to get gentle support prompts.</string>
+    <string name="companion_banner_message_no_due_date">Add a due date in Settings to sync reminders with the pregnancy timeline you’re supporting.</string>
+    <string name="companion_banner_week_context">This week’s focus: support week %1$d together.</string>
     <string name="select_due_date">Select due date</string>
     <string name="selected_due_date_label">Due date: %1$s</string>
     <string name="due_date_prompt">Choose a due date to jump to the current week.</string>
@@ -33,6 +38,7 @@
     <string name="notification_title">Week %1$d check-in is ready</string>
     <string name="notification_body_with_tip">This week’s highlight: %1$s</string>
     <string name="notification_body_generic">Open the app to explore the latest week-by-week guidance.</string>
+    <string name="notification_body_partner_tip">This week’s support idea: %1$s</string>
     <string name="growth_trends_heading">Growth trends</string>
     <string name="growth_trends_overview">Visualize how baby’s size evolves each week.</string>
     <string name="growth_trends_length">Estimated length: %1$.1f cm</string>
@@ -44,8 +50,11 @@
     <string name="family_role_expectant_parent_description">I’m carrying the baby and want updates tailored to my experience.</string>
     <string name="family_role_partner_supporter">Partner or supporter</string>
     <string name="family_role_partner_supporter_description">I’m supporting the pregnant parent and want to stay in sync.</string>
-    <string name="family_role_family_friend">Family or friend</string>
-    <string name="family_role_family_friend_description">I’m cheering on the parents and want helpful context.</string>
+    <string name="partner_parent_focus_heading">How mom might be feeling</string>
+    <string name="partner_parent_focus_summary">Use these cues to check in with her and offer support that feels right.</string>
+    <string name="partner_baby_overview_heading">Baby at a glance</string>
+    <string name="partner_baby_overview_prompt">Share a quick peek now and explore the full update together later.</string>
+    <string name="partner_baby_overview_default">Baby keeps growing stronger and more active this week.</string>
     <string name="onboarding_welcome_title">Let’s get to know you</string>
     <string name="onboarding_welcome_subtitle">We’ll personalize your experience in three quick steps.</string>
     <string name="onboarding_role_prompt">How are you connected to this pregnancy?</string>

@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
+import com.example.babydevelopmenttracker.model.findWeek
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import kotlin.math.roundToInt
 

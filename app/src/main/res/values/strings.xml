@@ -70,6 +70,8 @@
     <string name="settings_account_signed_out">You’re not linked yet. Sign in to connect with your partner.</string>
     <string name="settings_account_sign_in_button">Sign in with Google</string>
     <string name="settings_account_sign_in_error">We couldn’t complete Google sign-in. Try again.</string>
+    <string name="settings_account_sign_in_configuration_error">Google sign-in isn’t configured yet. Add your web client ID and try again.</string>
+    <string name="settings_account_sign_in_missing_id_error">We couldn’t confirm your Google account. Try again.</string>
     <string name="settings_account_sign_out_error">Sign out didn’t finish. Check your connection and retry.</string>
     <string name="settings_partner_invite_title">Partner invite code</string>
     <string name="settings_partner_invite_description">Share a one-time code so your partner can sync to your pregnancy timeline.</string>
@@ -111,4 +113,5 @@
     <string name="onboarding_partner_code_description">Ask the expectant parent for their invite code so we can match their due date.</string>
     <string name="onboarding_partner_code_placeholder">Type the invite code</string>
     <string name="onboarding_partner_code_error">We couldn’t verify that code. Check it and try again.</string>
+    <string name="google_sign_in_server_client_id" translatable="false">633549776297-j7uskpsa9vg2555dsl768ghsdg48fi8n.apps.googleusercontent.com</string>
 </resources>

@@ -1,7 +1,9 @@
 package com.example.babydevelopmenttracker
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -162,13 +164,13 @@ private fun parseEmailFromIdToken(idToken: String?): String? {
 
 private suspend fun requestGoogleIdTokenCredential(
     credentialManager: CredentialManager,
-    context: Context,
+    activityContext: Activity,
     requests: List<GetCredentialRequest>
 ): GoogleIdTokenCredential? {
     var lastCredentialException: GetCredentialException? = null
     requests.forEach { request ->
         try {
-            val response = credentialManager.getCredential(context, request)
+            val response = credentialManager.getCredential(activityContext, request)
             val credential = response.credential
             val googleCredential = when (credential) {
                 is CustomCredential -> {
@@ -193,6 +195,12 @@ private suspend fun requestGoogleIdTokenCredential(
     }
     lastCredentialException?.let { throw it }
     return null
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -227,6 +235,7 @@ fun BabyDevelopmentTrackerScreen(
     reminderScheduler: WeeklyReminderScheduler
 ) {
     val context = LocalContext.current
+    val activityContext = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
@@ -309,13 +318,18 @@ fun BabyDevelopmentTrackerScreen(
         googleCombinedCredentialRequest,
         googleIdOnlyCredentialRequest,
         googleSignInOnlyCredentialRequest,
-        isGoogleSignInConfigured
+        isGoogleSignInConfigured,
+        activityContext
     ) {
         {
             googleSignInError = null
             if (!isGoogleSignInConfigured) {
                 googleSignInError = context.getString(
                     R.string.settings_account_sign_in_configuration_error
+                )
+            } else if (activityContext == null) {
+                googleSignInError = context.getString(
+                    R.string.settings_account_sign_in_error
                 )
             } else {
                 scope.launch {
@@ -333,7 +347,7 @@ fun BabyDevelopmentTrackerScreen(
                         }
                         val googleCredential = requestGoogleIdTokenCredential(
                             credentialManager,
-                            context,
+                            activityContext,
                             googleCredentialRequests
                         )
                         if (googleCredential == null) {

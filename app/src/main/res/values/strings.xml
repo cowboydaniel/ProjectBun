@@ -69,11 +69,14 @@
     <string name="settings_partner_invite_helper_text">Send the code however you like. Your partner enters it in Settings to match your due date.</string>
     <string name="settings_partner_connection_toggle_title">Allow partner connection</string>
     <string name="settings_partner_connection_toggle_description">Let your partner sync future features we release for shared planning.</string>
+    <string name="settings_partner_connection_error">We couldn’t create your family link. Check your connection and try again.</string>
+    <string name="settings_partner_connection_missing_code">Add a due date to generate your invite code before enabling sharing.</string>
     <string name="settings_partner_code_title">Add your invite code</string>
     <string name="settings_partner_code_description">Enter the code the expectant parent shared to match their due date.</string>
     <string name="settings_partner_code_placeholder">Enter code (e.g. BUN1-A2BC)</string>
     <string name="settings_partner_code_apply">Connect to pregnancy</string>
     <string name="settings_partner_code_error">That code didn’t work. Double-check the letters and try again.</string>
+    <string name="settings_partner_code_registration_error">We couldn’t register your device right now. Try again in a moment.</string>
     <string name="settings_partner_code_success">You’re now synced. Due date set to %1$s.</string>
     <string name="settings_partner_code_prompt">Enter the invite code to sync the due date.</string>
     <string name="settings_due_date_description_partner">Your due date comes from the expectant parent. Re-enter their code if they share an update.</string>

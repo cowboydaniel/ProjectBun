@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -100,6 +101,9 @@ import com.example.babydevelopmenttracker.model.FetalGrowthPoint
 import com.example.babydevelopmenttracker.model.FetalGrowthTrends
 import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
+import com.example.babydevelopmenttracker.network.CreateFamilyRequest
+import com.example.babydevelopmenttracker.network.FamilySyncService
+import com.example.babydevelopmenttracker.network.RegisterFamilyMemberRequest
 import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import com.example.babydevelopmenttracker.ui.theme.ThemePreference
@@ -108,6 +112,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
@@ -123,12 +128,25 @@ class MainActivity : ComponentActivity() {
 private const val GENDER_REVEAL_WEEK = 18
 private enum class DrawerDestination { Home, Settings }
 
+private const val FAMILY_SYNC_TAG = "FamilySync"
+
+private sealed class PartnerInviteOutcome {
+    data class Success(val epochDay: Long) : PartnerInviteOutcome()
+    data class Error(val reason: PartnerInviteError) : PartnerInviteOutcome()
+}
+
+private enum class PartnerInviteError {
+    InvalidCode,
+    RegistrationFailed,
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BabyDevelopmentTrackerApp() {
     val context = LocalContext.current
     val userPreferencesRepository = remember(context) { UserPreferencesRepository(context) }
     val reminderScheduler = remember(context) { WeeklyReminderScheduler(context) }
+    val familySyncService = remember { FamilySyncService.create() }
     val userPreferences by userPreferencesRepository.userPreferences.collectAsState(
         initial = UserPreferences()
     )
@@ -141,7 +159,8 @@ fun BabyDevelopmentTrackerApp() {
             BabyDevelopmentTrackerScreen(
                 userPreferences = userPreferences,
                 userPreferencesRepository = userPreferencesRepository,
-                reminderScheduler = reminderScheduler
+                reminderScheduler = reminderScheduler,
+                familySyncService = familySyncService
             )
         }
     }
@@ -152,7 +171,8 @@ fun BabyDevelopmentTrackerApp() {
 fun BabyDevelopmentTrackerScreen(
     userPreferences: UserPreferences,
     userPreferencesRepository: UserPreferencesRepository,
-    reminderScheduler: WeeklyReminderScheduler
+    reminderScheduler: WeeklyReminderScheduler,
+    familySyncService: FamilySyncService
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -176,33 +196,121 @@ fun BabyDevelopmentTrackerScreen(
 
     var partnerCodeError by remember { mutableStateOf<String?>(null) }
     var partnerCodeSuccess by remember { mutableStateOf<String?>(null) }
+    var partnerLinkError by remember { mutableStateOf<String?>(null) }
+    var isPartnerLinking by remember { mutableStateOf(false) }
+    var isPartnerCodeSubmitting by remember { mutableStateOf(false) }
     val clearPartnerCodeStatus: () -> Unit = remember {
         {
             partnerCodeError = null
             partnerCodeSuccess = null
         }
     }
-    val handlePartnerCodeSubmit: (String) -> Unit = remember(remindersEnabled) {
-        { code ->
-            clearPartnerCodeStatus()
-            val epochDay = PartnerInviteCode.parse(code)
-            if (epochDay != null) {
-                val targetDate = LocalDate.ofEpochDay(epochDay)
-                partnerCodeSuccess = context.getString(
-                    R.string.settings_partner_code_success,
-                    targetDate.format(dateFormatter)
-                )
-                scope.launch {
-                    userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite = true)
-                    if (remindersEnabled) {
-                        reminderScheduler.scheduleWeeklyReminder(epochDay)
+
+    LaunchedEffect(inviteCode) {
+        partnerLinkError = null
+    }
+
+    suspend fun registerPartnerInvite(code: String): PartnerInviteOutcome {
+        val epochDay = PartnerInviteCode.parse(code)
+            ?: return PartnerInviteOutcome.Error(PartnerInviteError.InvalidCode)
+        val familyId = PartnerInviteCode.familyIdForInviteCode(code)
+            ?: return PartnerInviteOutcome.Error(PartnerInviteError.RegistrationFailed)
+
+        return try {
+            userPreferencesRepository.updateFamilyLink(familyId, null)
+            val response = familySyncService.registerFamilyMember(
+                familyId,
+                RegisterFamilyMemberRequest(inviteCode = code)
+            )
+            userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite = true)
+            if (remindersEnabled) {
+                reminderScheduler.scheduleWeeklyReminder(epochDay)
+            }
+            userPreferencesRepository.updateDeviceAuthToken(response.authToken)
+            userPreferencesRepository.updatePartnerLinkApproved(true)
+            PartnerInviteOutcome.Success(epochDay)
+        } catch (error: Exception) {
+            Log.e(FAMILY_SYNC_TAG, "Failed to register family member", error)
+            userPreferencesRepository.updateFamilyLink(null, null)
+            userPreferencesRepository.updateDeviceAuthToken(null)
+            userPreferencesRepository.updatePartnerLinkApproved(false)
+            PartnerInviteOutcome.Error(PartnerInviteError.RegistrationFailed)
+        }
+    }
+
+    val handlePartnerLinkToggle: (Boolean) -> Unit = { approved ->
+        if (isPartnerLinking) return@handlePartnerLinkToggle
+        partnerLinkError = null
+        if (approved) {
+            if (inviteCode == null) {
+                partnerLinkError =
+                    context.getString(R.string.settings_partner_connection_missing_code)
+                return@handlePartnerLinkToggle
+            }
+            val familyId = PartnerInviteCode.familyIdForInviteCode(inviteCode)
+            if (familyId == null) {
+                partnerLinkError = context.getString(R.string.settings_partner_connection_error)
+                return@handlePartnerLinkToggle
+            }
+            val secret = userPreferences.familyLinkSecret ?: UUID.randomUUID().toString()
+            isPartnerLinking = true
+            scope.launch {
+                try {
+                    userPreferencesRepository.updateFamilyLink(familyId, secret)
+                    val response = familySyncService.createFamily(
+                        familyId,
+                        CreateFamilyRequest(secret = secret)
+                    )
+                    userPreferencesRepository.updateDeviceAuthToken(response.authToken)
+                    userPreferencesRepository.updatePartnerLinkApproved(true)
+                } catch (error: Exception) {
+                    Log.e(FAMILY_SYNC_TAG, "Failed to create family link", error)
+                    partnerLinkError =
+                        context.getString(R.string.settings_partner_connection_error)
+                    userPreferencesRepository.updateFamilyLink(null, null)
+                    userPreferencesRepository.updateDeviceAuthToken(null)
+                    userPreferencesRepository.updatePartnerLinkApproved(false)
+                } finally {
+                    isPartnerLinking = false
+                }
+            }
+        } else {
+            isPartnerLinking = true
+            scope.launch {
+                try {
+                    userPreferencesRepository.updatePartnerLinkApproved(false)
+                    userPreferencesRepository.updateFamilyLink(null, null)
+                    userPreferencesRepository.updateDeviceAuthToken(null)
+                } finally {
+                    isPartnerLinking = false
+                }
+            }
+        }
+    }
+
+    val handlePartnerCodeSubmit: (String) -> Unit = { code ->
+        if (isPartnerCodeSubmitting) return@handlePartnerCodeSubmit
+        clearPartnerCodeStatus()
+        scope.launch {
+            isPartnerCodeSubmitting = true
+            when (val result = registerPartnerInvite(code)) {
+                is PartnerInviteOutcome.Success -> {
+                    val targetDate = LocalDate.ofEpochDay(result.epochDay)
+                    partnerCodeSuccess = context.getString(
+                        R.string.settings_partner_code_success,
+                        targetDate.format(dateFormatter)
+                    )
+                }
+                is PartnerInviteOutcome.Error -> {
+                    partnerCodeError = when (result.reason) {
+                        PartnerInviteError.InvalidCode ->
+                            context.getString(R.string.settings_partner_code_error)
+                        PartnerInviteError.RegistrationFailed ->
+                            context.getString(R.string.settings_partner_code_registration_error)
                     }
                 }
-                Unit
-            } else {
-                partnerCodeError = context.getString(R.string.settings_partner_code_error)
             }
-            Unit
+            isPartnerCodeSubmitting = false
         }
     }
 
@@ -225,6 +333,7 @@ fun BabyDevelopmentTrackerScreen(
             partnerCodeError = null
             partnerCodeSuccess = null
         }
+        partnerLinkError = null
     }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -297,6 +406,7 @@ fun BabyDevelopmentTrackerScreen(
                 }
                 Unit
             },
+            onPartnerInviteSubmit = { code -> registerPartnerInvite(code) },
             onReminderToggle = handleReminderToggle,
             onFinish = {
                 scope.launch { userPreferencesRepository.updateOnboardingCompleted(true) }
@@ -401,13 +511,11 @@ fun BabyDevelopmentTrackerScreen(
                         },
                         inviteCode = inviteCode,
                         partnerLinkApproved = partnerLinkApproved,
-                        onPartnerLinkApprovedChange = { approved ->
-                            scope.launch {
-                                userPreferencesRepository.updatePartnerLinkApproved(approved)
-                            }
-                            Unit
-                        },
+                        onPartnerLinkApprovedChange = handlePartnerLinkToggle,
+                        isPartnerLinking = isPartnerLinking,
+                        partnerLinkErrorMessage = partnerLinkError,
                         onPartnerCodeSubmit = handlePartnerCodeSubmit,
+                        isPartnerCodeSubmitting = isPartnerCodeSubmitting,
                         onPartnerCodeInputChanged = clearPartnerCodeStatus,
                         partnerCodeError = partnerCodeError,
                         partnerCodeSuccessMessage = partnerCodeSuccess,
@@ -698,7 +806,10 @@ private fun SettingsContent(
     inviteCode: String?,
     partnerLinkApproved: Boolean,
     onPartnerLinkApprovedChange: (Boolean) -> Unit,
+    isPartnerLinking: Boolean,
+    partnerLinkErrorMessage: String?,
     onPartnerCodeSubmit: (String) -> Unit,
+    isPartnerCodeSubmitting: Boolean,
     onPartnerCodeInputChanged: () -> Unit,
     partnerCodeError: String?,
     partnerCodeSuccessMessage: String?,
@@ -838,8 +949,17 @@ private fun SettingsContent(
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
                             checkedThumbColor = MaterialTheme.colorScheme.onPrimary
                         ),
+                        enabled = !isPartnerLinking,
                         modifier = Modifier.align(Alignment.CenterEnd)
                     )
+                    partnerLinkErrorMessage?.let { error ->
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
             }
         } else {
@@ -873,7 +993,7 @@ private fun SettingsContent(
                     onClick = {
                         onPartnerCodeSubmit(partnerCodeInput)
                     },
-                    enabled = partnerCodeInput.isNotBlank(),
+                    enabled = partnerCodeInput.isNotBlank() && !isPartnerCodeSubmitting,
                     modifier = Modifier
                         .padding(top = 16.dp)
                         .fillMaxWidth()
@@ -1198,6 +1318,7 @@ private fun OnboardingFlow(
     remindersEnabled: Boolean,
     onSelectFamilyRole: (FamilyRole) -> Unit,
     onConfirmDueDate: (LocalDate, Boolean) -> Unit,
+    onPartnerInviteSubmit: suspend (String) -> PartnerInviteOutcome,
     onReminderToggle: (Boolean) -> Unit,
     onFinish: () -> Unit,
     showPermissionRationale: Boolean,
@@ -1217,6 +1338,8 @@ private fun OnboardingFlow(
     var selectedRole by remember(familyRole) { mutableStateOf(familyRole) }
     var partnerCode by rememberSaveable { mutableStateOf("") }
     var partnerCodeError by remember { mutableStateOf<String?>(null) }
+    var isPartnerCodeSubmitting by remember { mutableStateOf(false) }
+    val onboardingScope = rememberCoroutineScope()
 
     val selectedDate = datePickerState.selectedDateMillis?.let { millis ->
         Instant.ofEpochMilli(millis).atZone(zoneId).toLocalDate()
@@ -1229,11 +1352,16 @@ private fun OnboardingFlow(
             partnerCode = ""
             partnerCodeError = null
         }
+        isPartnerCodeSubmitting = false
     }
 
     val canProceed = when (step) {
         0 -> selectedRole != null
-        1 -> if (isPartnerRoleSelected) partnerCode.isNotBlank() else selectedDate != null
+        1 -> if (isPartnerRoleSelected) {
+            partnerCode.isNotBlank() && !isPartnerCodeSubmitting
+        } else {
+            selectedDate != null
+        }
         else -> true
     }
 
@@ -1394,13 +1522,25 @@ private fun OnboardingFlow(
                             step += 1
                         }
                         1 -> if (isPartnerRoleSelected) {
-                            val epochDay = PartnerInviteCode.parse(partnerCode)
-                            if (epochDay != null) {
-                                partnerCodeError = null
-                                onConfirmDueDate(LocalDate.ofEpochDay(epochDay), true)
-                                step += 1
-                            } else {
-                                partnerCodeError = context.getString(R.string.onboarding_partner_code_error)
+                            if (!isPartnerCodeSubmitting) {
+                                onboardingScope.launch {
+                                    isPartnerCodeSubmitting = true
+                                    when (val result = onPartnerInviteSubmit(partnerCode)) {
+                                        is PartnerInviteOutcome.Success -> {
+                                            partnerCodeError = null
+                                            step += 1
+                                        }
+                                        is PartnerInviteOutcome.Error -> {
+                                            partnerCodeError = when (result.reason) {
+                                                PartnerInviteError.InvalidCode ->
+                                                    context.getString(R.string.onboarding_partner_code_error)
+                                                PartnerInviteError.RegistrationFailed ->
+                                                    context.getString(R.string.settings_partner_code_registration_error)
+                                            }
+                                        }
+                                    }
+                                    isPartnerCodeSubmitting = false
+                                }
                             }
                         } else {
                             selectedDate?.let {

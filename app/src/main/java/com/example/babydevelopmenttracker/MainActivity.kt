@@ -112,7 +112,7 @@ import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.Identity
+import com.google.android.gms.auth.api.identity.Identity
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.LocalDate
@@ -236,7 +236,7 @@ fun BabyDevelopmentTrackerScreen(
     }
     var googleSignInError by remember { mutableStateOf<String?>(null) }
 
-    val handleGoogleSignIn = remember(
+    val handleGoogleSignIn: () -> Unit = remember(
         credentialManager,
         googleCredentialRequest,
         isGoogleSignInConfigured
@@ -284,7 +284,7 @@ fun BabyDevelopmentTrackerScreen(
 
                         val emailAddress = parseEmailFromIdToken(googleCredential.idToken)
                         userPreferencesRepository.updateGoogleAccount(
-                            accountId = accountId,
+                            id = accountId,
                             email = emailAddress,
                             name = googleCredential.displayName
                         )
@@ -304,7 +304,7 @@ fun BabyDevelopmentTrackerScreen(
         }
     }
 
-    val handleGoogleSignOut = remember(googleIdentityClient, credentialManager) {
+    val handleGoogleSignOut: () -> Unit = remember(googleIdentityClient, credentialManager) {
         {
             googleSignInError = null
             val signOutTask = googleIdentityClient.signOut()
@@ -326,14 +326,14 @@ fun BabyDevelopmentTrackerScreen(
 
     var partnerCodeError by remember { mutableStateOf<String?>(null) }
     var partnerCodeSuccess by remember { mutableStateOf<String?>(null) }
-    val clearPartnerCodeStatus = remember {
+    val clearPartnerCodeStatus: () -> Unit = remember {
         {
             partnerCodeError = null
             partnerCodeSuccess = null
         }
     }
-    val handlePartnerCodeSubmit = remember(remindersEnabled) {
-        { code: String ->
+    val handlePartnerCodeSubmit: (String) -> Unit = remember(remindersEnabled) {
+        { code ->
             clearPartnerCodeStatus()
             val epochDay = PartnerInviteCode.parse(code)
             if (epochDay != null) {

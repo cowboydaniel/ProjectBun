@@ -7,7 +7,10 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.DELETE
+import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 
 data class CreateFamilyRequest(val secret: String? = null)
@@ -18,6 +21,14 @@ data class RegisterFamilyMemberRequest(
 )
 
 data class FamilyRegistrationResponse(val authToken: String)
+
+data class JournalEntryPayload(
+    val id: String,
+    val timestampEpochMillis: Long,
+    val mood: String,
+    val body: String,
+    val attachments: List<String>? = null,
+)
 
 interface FamilySyncService {
     @POST("families/{familyId}")
@@ -31,6 +42,24 @@ interface FamilySyncService {
         @Path("familyId") familyId: String,
         @Body request: RegisterFamilyMemberRequest,
     ): FamilyRegistrationResponse
+
+    @GET("families/{familyId}/journal")
+    suspend fun fetchJournalEntries(
+        @Path("familyId") familyId: String,
+    ): List<JournalEntryPayload>
+
+    @PUT("families/{familyId}/journal/{entryId}")
+    suspend fun upsertJournalEntry(
+        @Path("familyId") familyId: String,
+        @Path("entryId") entryId: String,
+        @Body entry: JournalEntryPayload,
+    )
+
+    @DELETE("families/{familyId}/journal/{entryId}")
+    suspend fun deleteJournalEntry(
+        @Path("familyId") familyId: String,
+        @Path("entryId") entryId: String,
+    )
 
     companion object {
         private const val DEFAULT_BASE_URL = "https://example.com/api/"

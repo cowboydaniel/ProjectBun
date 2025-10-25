@@ -53,6 +53,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -96,6 +98,10 @@ import com.example.babydevelopmenttracker.data.FamilyRole
 import com.example.babydevelopmenttracker.data.PartnerInviteCode
 import com.example.babydevelopmenttracker.data.UserPreferences
 import com.example.babydevelopmenttracker.data.UserPreferencesRepository
+import com.example.babydevelopmenttracker.data.journal.JournalDatabase
+import com.example.babydevelopmenttracker.data.journal.JournalEntry
+import com.example.babydevelopmenttracker.data.journal.JournalPdfExporter
+import com.example.babydevelopmenttracker.data.journal.JournalRepository
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
 import com.example.babydevelopmenttracker.model.FetalGrowthPoint
 import com.example.babydevelopmenttracker.model.FetalGrowthTrends
@@ -108,6 +114,9 @@ import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
+import com.example.babydevelopmenttracker.ui.journal.JournalEditorScreen
+import com.example.babydevelopmenttracker.ui.journal.JournalExportDialog
+import com.example.babydevelopmenttracker.ui.journal.JournalListScreen
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -115,6 +124,8 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.firstOrNull
+import androidx.room.withTransaction
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,7 +137,12 @@ class MainActivity : ComponentActivity() {
 
 // Most anatomy scans that reveal a baby’s sex happen around week 18.
 private const val GENDER_REVEAL_WEEK = 18
-private enum class DrawerDestination { Home, Settings }
+private enum class DrawerDestination { Home, Journal, Settings }
+
+private sealed class JournalDestination {
+    data object List : JournalDestination()
+    data class Editor(val entryId: String?) : JournalDestination()
+}
 
 private const val FAMILY_SYNC_TAG = "FamilySync"
 
@@ -147,6 +163,17 @@ fun BabyDevelopmentTrackerApp() {
     val userPreferencesRepository = remember(context) { UserPreferencesRepository(context) }
     val reminderScheduler = remember(context) { WeeklyReminderScheduler(context) }
     val familySyncService = remember { FamilySyncService.create() }
+    val journalDatabase = remember(context) { JournalDatabase.getInstance(context) }
+    val journalRepository = remember(journalDatabase, familySyncService, userPreferencesRepository) {
+        JournalRepository(
+            journalDao = journalDatabase.journalDao(),
+            familySyncService = familySyncService,
+            familyIdProvider = {
+                userPreferencesRepository.userPreferences.firstOrNull()?.familyLinkId
+            },
+            transactionRunner = { block -> journalDatabase.withTransaction { block() } }
+        )
+    }
     val userPreferences by userPreferencesRepository.userPreferences.collectAsState(
         initial = UserPreferences()
     )
@@ -160,7 +187,8 @@ fun BabyDevelopmentTrackerApp() {
                 userPreferences = userPreferences,
                 userPreferencesRepository = userPreferencesRepository,
                 reminderScheduler = reminderScheduler,
-                familySyncService = familySyncService
+                familySyncService = familySyncService,
+                journalRepository = journalRepository
             )
         }
     }
@@ -172,7 +200,8 @@ fun BabyDevelopmentTrackerScreen(
     userPreferences: UserPreferences,
     userPreferencesRepository: UserPreferencesRepository,
     reminderScheduler: WeeklyReminderScheduler,
-    familySyncService: FamilySyncService
+    familySyncService: FamilySyncService,
+    journalRepository: JournalRepository
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -186,6 +215,7 @@ fun BabyDevelopmentTrackerScreen(
     val themePreference = userPreferences.themePreference
     val dueDateFromPartnerInvite = userPreferences.dueDateFromPartnerInvite
     val partnerLinkApproved = userPreferences.partnerLinkApproved
+    val shareJournalWithPartner = userPreferences.shareJournalWithPartner
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
     var showDatePicker by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
@@ -194,20 +224,39 @@ fun BabyDevelopmentTrackerScreen(
         dueDateEpochDay?.let(PartnerInviteCode::generate)
     }
 
+    val journalEntries by journalRepository.journalEntries.collectAsState(initial = emptyList())
+    val canPartnerViewJournal = partnerLinkApproved && shareJournalWithPartner
+
     var partnerCodeError by remember { mutableStateOf<String?>(null) }
     var partnerCodeSuccess by remember { mutableStateOf<String?>(null) }
     var partnerLinkError by remember { mutableStateOf<String?>(null) }
     var isPartnerLinking by remember { mutableStateOf(false) }
     var isPartnerCodeSubmitting by remember { mutableStateOf(false) }
+    var journalDestination by remember { mutableStateOf<JournalDestination>(JournalDestination.List) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var isExportingJournal by remember { mutableStateOf(false) }
+    var isSavingJournalEntry by remember { mutableStateOf(false) }
     val clearPartnerCodeStatus: () -> Unit = remember {
         {
             partnerCodeError = null
             partnerCodeSuccess = null
         }
     }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val journalExporter = remember(context) { JournalPdfExporter(context) }
 
     LaunchedEffect(inviteCode) {
         partnerLinkError = null
+    }
+
+    LaunchedEffect(userPreferences.familyLinkId) {
+        journalRepository.refreshFromRemote()
+    }
+
+    LaunchedEffect(canPartnerViewJournal, familyRole) {
+        if (familyRole == FamilyRole.PARTNER_SUPPORTER && !canPartnerViewJournal) {
+            journalDestination = JournalDestination.List
+        }
     }
 
     suspend fun registerPartnerInvite(code: String): PartnerInviteOutcome {
@@ -270,6 +319,7 @@ fun BabyDevelopmentTrackerScreen(
                     userPreferencesRepository.updateFamilyLink(null, null)
                     userPreferencesRepository.updateDeviceAuthToken(null)
                     userPreferencesRepository.updatePartnerLinkApproved(false)
+                    userPreferencesRepository.updateShareJournalWithPartner(false)
                 } finally {
                     isPartnerLinking = false
                 }
@@ -279,6 +329,7 @@ fun BabyDevelopmentTrackerScreen(
             scope.launch {
                 try {
                     userPreferencesRepository.updatePartnerLinkApproved(false)
+                    userPreferencesRepository.updateShareJournalWithPartner(false)
                     userPreferencesRepository.updateFamilyLink(null, null)
                     userPreferencesRepository.updateDeviceAuthToken(null)
                 } finally {
@@ -311,6 +362,20 @@ fun BabyDevelopmentTrackerScreen(
                 }
             }
             isPartnerCodeSubmitting = false
+        }
+    }
+
+    val handleShareJournalToggle: (Boolean) -> Unit = { share ->
+        if (share && !partnerLinkApproved) {
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.journal_partner_restricted_snackbar)
+                )
+            }
+            return@handleShareJournalToggle
+        }
+        scope.launch {
+            userPreferencesRepository.updateShareJournalWithPartner(share)
         }
     }
 
@@ -429,6 +494,18 @@ fun BabyDevelopmentTrackerScreen(
                         selected = currentDestination == DrawerDestination.Home,
                         onClick = {
                             currentDestination = DrawerDestination.Home
+                            journalDestination = JournalDestination.List
+                            scope.launch { drawerState.close() }
+                            Unit
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(text = stringResource(id = R.string.navigation_journal)) },
+                        selected = currentDestination == DrawerDestination.Journal,
+                        onClick = {
+                            currentDestination = DrawerDestination.Journal
+                            journalDestination = JournalDestination.List
                             scope.launch { drawerState.close() }
                             Unit
                         },
@@ -439,6 +516,7 @@ fun BabyDevelopmentTrackerScreen(
                         selected = currentDestination == DrawerDestination.Settings,
                         onClick = {
                             currentDestination = DrawerDestination.Settings
+                            journalDestination = JournalDestination.List
                             scope.launch { drawerState.close() }
                             Unit
                         },
@@ -475,7 +553,8 @@ fun BabyDevelopmentTrackerScreen(
                             navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     )
-                }
+                },
+                snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
             ) { innerPadding ->
                 when (currentDestination) {
                     DrawerDestination.Home -> HomeContent(
@@ -488,6 +567,117 @@ fun BabyDevelopmentTrackerScreen(
                         familyRole = familyRole,
                         remindersEnabled = remindersEnabled
                     )
+                    DrawerDestination.Journal -> {
+                        when (val destination = journalDestination) {
+                            JournalDestination.List -> {
+                                JournalListScreen(
+                                    modifier = Modifier.padding(innerPadding),
+                                    entries = journalEntries,
+                                    onAddEntry = {
+                                        journalDestination = JournalDestination.Editor(null)
+                                    },
+                                    onEntrySelected = { entry ->
+                                        journalDestination = JournalDestination.Editor(entry.id)
+                                    },
+                                    onExport = {
+                                        if (journalEntries.isEmpty()) {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    context.getString(R.string.journal_export_empty_error)
+                                                )
+                                            }
+                                        } else {
+                                            showExportDialog = true
+                                        }
+                                    },
+                                    isPartnerView = familyRole == FamilyRole.PARTNER_SUPPORTER,
+                                    canPartnerViewEntries = canPartnerViewJournal,
+                                    zoneId = zoneId
+                                )
+                            }
+
+                            is JournalDestination.Editor -> {
+                                val entryToEdit: JournalEntry? = destination.entryId?.let { id ->
+                                    journalEntries.firstOrNull { it.id == id }
+                                }
+                                JournalEditorScreen(
+                                    modifier = Modifier.padding(innerPadding),
+                                    initialEntry = entryToEdit,
+                                    onSave = { entry ->
+                                        if (!isSavingJournalEntry) {
+                                            isSavingJournalEntry = true
+                                            scope.launch {
+                                                journalRepository.upsertEntry(entry)
+                                                isSavingJournalEntry = false
+                                                journalDestination = JournalDestination.List
+                                                snackbarHostState.showSnackbar(
+                                                    context.getString(R.string.journal_entry_saved)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onCancel = {
+                                        journalDestination = JournalDestination.List
+                                    },
+                                    onDelete = if (destination.entryId != null) {
+                                        {
+                                            if (!isSavingJournalEntry) {
+                                                isSavingJournalEntry = true
+                                                scope.launch {
+                                                    journalRepository.deleteEntry(destination.entryId)
+                                                    isSavingJournalEntry = false
+                                                    journalDestination = JournalDestination.List
+                                                    snackbarHostState.showSnackbar(
+                                                        context.getString(R.string.journal_entry_deleted)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    isSaving = isSavingJournalEntry,
+                                    zoneId = zoneId
+                                )
+                            }
+                        }
+
+                        if (showExportDialog) {
+                            JournalExportDialog(
+                                entryCount = journalEntries.size,
+                                onConfirm = {
+                                    if (isExportingJournal) return@JournalExportDialog
+                                    isExportingJournal = true
+                                    scope.launch {
+                                        runCatching {
+                                            val file = journalExporter.export(
+                                                entries = journalEntries,
+                                                zoneId = zoneId
+                                            )
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(
+                                                    R.string.journal_export_success,
+                                                    file.absolutePath
+                                                )
+                                            )
+                                        }.onFailure {
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(R.string.journal_export_error)
+                                            )
+                                        }
+                                        isExportingJournal = false
+                                        showExportDialog = false
+                                    }
+                                },
+                                onDismiss = {
+                                    if (!isExportingJournal) {
+                                        showExportDialog = false
+                                    }
+                                },
+                                isExporting = isExportingJournal
+                            )
+                        }
+                    }
                     DrawerDestination.Settings -> SettingsContent(
                         modifier = Modifier.padding(innerPadding),
                         dueDate = dueDate,
@@ -512,6 +702,8 @@ fun BabyDevelopmentTrackerScreen(
                         inviteCode = inviteCode,
                         partnerLinkApproved = partnerLinkApproved,
                         onPartnerLinkApprovedChange = handlePartnerLinkToggle,
+                        shareJournalWithPartner = shareJournalWithPartner,
+                        onShareJournalWithPartnerChange = handleShareJournalToggle,
                         isPartnerLinking = isPartnerLinking,
                         partnerLinkErrorMessage = partnerLinkError,
                         onPartnerCodeSubmit = handlePartnerCodeSubmit,
@@ -806,6 +998,8 @@ private fun SettingsContent(
     inviteCode: String?,
     partnerLinkApproved: Boolean,
     onPartnerLinkApprovedChange: (Boolean) -> Unit,
+    shareJournalWithPartner: Boolean,
+    onShareJournalWithPartnerChange: (Boolean) -> Unit,
     isPartnerLinking: Boolean,
     partnerLinkErrorMessage: String?,
     onPartnerCodeSubmit: (String) -> Unit,
@@ -960,6 +1154,40 @@ private fun SettingsContent(
                             modifier = Modifier.padding(top = 8.dp)
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(end = 72.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.settings_partner_journal_toggle_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = stringResource(id = R.string.settings_partner_journal_toggle_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    Switch(
+                        checked = shareJournalWithPartner,
+                        onCheckedChange = onShareJournalWithPartnerChange,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        enabled = partnerLinkApproved && !isPartnerLinking,
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    )
                 }
             }
         } else {

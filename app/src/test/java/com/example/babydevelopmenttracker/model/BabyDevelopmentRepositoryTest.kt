@@ -20,9 +20,9 @@ class BabyDevelopmentRepositoryTest {
             val info = BabyDevelopmentRepository.findWeek(week)
             assertNotNull("Missing content for week $week", info)
             info!!
-            assertTrue(info.babyHighlights.isNotBlank())
-            assertTrue(info.parentChanges.isNotBlank())
-            assertTrue(info.tips.isNotBlank())
+            assertTrue(info.babyHighlights.isNotEmpty())
+            assertTrue(info.parentChanges.isNotEmpty())
+            assertTrue(info.tips.isNotEmpty())
 
             assertNotEquals(
                 "Week $week should not use fallback baby highlights",

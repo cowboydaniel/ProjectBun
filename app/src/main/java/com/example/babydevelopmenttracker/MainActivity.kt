@@ -1,6 +1,7 @@
 package com.example.babydevelopmenttracker
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -159,6 +160,41 @@ private fun parseEmailFromIdToken(idToken: String?): String? {
     }
 }
 
+private suspend fun requestGoogleIdTokenCredential(
+    credentialManager: CredentialManager,
+    context: Context,
+    requests: List<GetCredentialRequest>
+): GoogleIdTokenCredential? {
+    var lastCredentialException: GetCredentialException? = null
+    requests.forEach { request ->
+        try {
+            val response = credentialManager.getCredential(context, request)
+            val credential = response.credential
+            val googleCredential = when (credential) {
+                is CustomCredential -> {
+                    when (credential.type) {
+                        GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL,
+                        GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_SIWG_CREDENTIAL -> {
+                            GoogleIdTokenCredential.createFrom(credential.data)
+                        }
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+            if (googleCredential != null) {
+                return googleCredential
+            }
+        } catch (exception: GetCredentialCancellationException) {
+            throw exception
+        } catch (exception: GetCredentialException) {
+            lastCredentialException = exception
+        }
+    }
+    lastCredentialException?.let { throw it }
+    return null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BabyDevelopmentTrackerApp() {
@@ -225,26 +261,54 @@ fun BabyDevelopmentTrackerScreen(
         googleServerClientId.isNotBlank() &&
             googleServerClientId != GOOGLE_WEB_CLIENT_ID_PLACEHOLDER
     }
-    val googleSignInWithGoogleOption = remember(googleServerClientId) {
-        GetSignInWithGoogleOption.Builder(googleServerClientId).build()
+    val googleSignInWithGoogleOption = remember(googleServerClientId, isGoogleSignInConfigured) {
+        if (isGoogleSignInConfigured) {
+            GetSignInWithGoogleOption.Builder(googleServerClientId).build()
+        } else {
+            null
+        }
     }
-    val googleIdOption = remember(googleServerClientId) {
-        GetGoogleIdOption.Builder()
-            .setServerClientId(googleServerClientId)
-            .setFilterByAuthorizedAccounts(false)
-            .build()
+    val googleIdOption = remember(googleServerClientId, isGoogleSignInConfigured) {
+        if (isGoogleSignInConfigured) {
+            GetGoogleIdOption.Builder()
+                .setServerClientId(googleServerClientId)
+                .setFilterByAuthorizedAccounts(false)
+                .build()
+        } else {
+            null
+        }
     }
-    val googleCredentialRequest = remember(googleSignInWithGoogleOption, googleIdOption) {
-        GetCredentialRequest.Builder()
-            .addCredentialOption(googleSignInWithGoogleOption)
-            .addCredentialOption(googleIdOption)
-            .build()
+    val googleCombinedCredentialRequest = remember(googleSignInWithGoogleOption, googleIdOption) {
+        if (googleSignInWithGoogleOption != null && googleIdOption != null) {
+            GetCredentialRequest.Builder()
+                .addCredentialOption(googleSignInWithGoogleOption)
+                .addCredentialOption(googleIdOption)
+                .build()
+        } else {
+            null
+        }
+    }
+    val googleIdOnlyCredentialRequest = remember(googleIdOption) {
+        googleIdOption?.let { option ->
+            GetCredentialRequest.Builder()
+                .addCredentialOption(option)
+                .build()
+        }
+    }
+    val googleSignInOnlyCredentialRequest = remember(googleSignInWithGoogleOption) {
+        googleSignInWithGoogleOption?.let { option ->
+            GetCredentialRequest.Builder()
+                .addCredentialOption(option)
+                .build()
+        }
     }
     var googleSignInError by remember { mutableStateOf<String?>(null) }
 
     val handleGoogleSignIn: () -> Unit = remember(
         credentialManager,
-        googleCredentialRequest,
+        googleCombinedCredentialRequest,
+        googleIdOnlyCredentialRequest,
+        googleSignInOnlyCredentialRequest,
         isGoogleSignInConfigured
     ) {
         {
@@ -256,23 +320,22 @@ fun BabyDevelopmentTrackerScreen(
             } else {
                 scope.launch {
                     try {
-                        val response = credentialManager.getCredential(
-                            context,
-                            googleCredentialRequest
+                        val googleCredentialRequests = listOfNotNull(
+                            googleCombinedCredentialRequest,
+                            googleIdOnlyCredentialRequest,
+                            googleSignInOnlyCredentialRequest
                         )
-                        val credential = response.credential
-                        val googleCredential = when (credential) {
-                            is CustomCredential -> {
-                                when (credential.type) {
-                                    GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL,
-                                    GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_SIWG_CREDENTIAL -> {
-                                        GoogleIdTokenCredential.createFrom(credential.data)
-                                    }
-                                    else -> null
-                                }
-                            }
-                            else -> null
+                        if (googleCredentialRequests.isEmpty()) {
+                            googleSignInError = context.getString(
+                                R.string.settings_account_sign_in_error
+                            )
+                            return@launch
                         }
+                        val googleCredential = requestGoogleIdTokenCredential(
+                            credentialManager,
+                            context,
+                            googleCredentialRequests
+                        )
                         if (googleCredential == null) {
                             googleSignInError = context.getString(
                                 R.string.settings_account_sign_in_error

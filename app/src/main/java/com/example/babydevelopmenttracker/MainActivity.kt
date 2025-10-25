@@ -12,6 +12,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -219,84 +219,85 @@ fun BabyDevelopmentTrackerScreen() {
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
-            ModalDrawerSheet {
-                Text(
-                    text = stringResource(id = R.string.app_name),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
-                )
-                NavigationDrawerItem(
-                    label = { Text(text = stringResource(id = R.string.navigation_home)) },
-                    selected = currentDestination == DrawerDestination.Home,
-                    onClick = {
-                        currentDestination = DrawerDestination.Home
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-                NavigationDrawerItem(
-                    label = { Text(text = stringResource(id = R.string.navigation_settings)) },
-                    selected = currentDestination == DrawerDestination.Settings,
-                    onClick = {
-                        currentDestination = DrawerDestination.Settings
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-            }
-        }
-        ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = stringResource(id = R.string.app_name),
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = { scope.launch { drawerState.open() } }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Menu,
-                                contentDescription = stringResource(id = R.string.drawer_menu_content_description)
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                ModalDrawerSheet {
+                    Text(
+                        text = stringResource(id = R.string.app_name),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
                     )
-                )
+                    NavigationDrawerItem(
+                        label = { Text(text = stringResource(id = R.string.navigation_home)) },
+                        selected = currentDestination == DrawerDestination.Home,
+                        onClick = {
+                            currentDestination = DrawerDestination.Home
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(text = stringResource(id = R.string.navigation_settings)) },
+                        selected = currentDestination == DrawerDestination.Settings,
+                        onClick = {
+                            currentDestination = DrawerDestination.Settings
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                }
             }
-        ) { innerPadding ->
-            when (currentDestination) {
-                DrawerDestination.Home -> HomeContent(
-                    modifier = Modifier.padding(innerPadding),
-                    selectedWeek = selectedWeek,
-                    onWeekChange = { selectedWeek = it },
-                    dueDate = dueDate,
-                    dateFormatter = dateFormatter,
-                    calculatedWeek = calculatedWeek,
-                    familyRole = familyRole
-                )
-                DrawerDestination.Settings -> SettingsContent(
-                    modifier = Modifier.padding(innerPadding),
-                    dueDate = dueDate,
-                    dateFormatter = dateFormatter,
-                    calculatedWeek = calculatedWeek,
-                    remindersEnabled = remindersEnabled,
-                    onReminderToggle = handleReminderToggle,
-                    showPermissionRationale = showPermissionRationale,
-                    onSelectDueDate = { showDatePicker = true },
-                    familyRole = familyRole,
-                    onFamilyRoleSelected = { role ->
-                        scope.launch { userPreferencesRepository.updateFamilyRole(role) }
-                    }
-                )
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = stringResource(id = R.string.app_name),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        },
+                        navigationIcon = {
+                            IconButton(
+                                onClick = { scope.launch { drawerState.open() } }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Menu,
+                                    contentDescription = stringResource(id = R.string.drawer_menu_content_description)
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                }
+            ) { innerPadding ->
+                when (currentDestination) {
+                    DrawerDestination.Home -> HomeContent(
+                        modifier = Modifier.padding(innerPadding),
+                        selectedWeek = selectedWeek,
+                        onWeekChange = { selectedWeek = it },
+                        dueDate = dueDate,
+                        dateFormatter = dateFormatter,
+                        calculatedWeek = calculatedWeek,
+                        familyRole = familyRole
+                    )
+                    DrawerDestination.Settings -> SettingsContent(
+                        modifier = Modifier.padding(innerPadding),
+                        dueDate = dueDate,
+                        dateFormatter = dateFormatter,
+                        calculatedWeek = calculatedWeek,
+                        remindersEnabled = remindersEnabled,
+                        onReminderToggle = handleReminderToggle,
+                        showPermissionRationale = showPermissionRationale,
+                        onSelectDueDate = { showDatePicker = true },
+                        familyRole = familyRole,
+                        onFamilyRoleSelected = { role ->
+                            scope.launch { userPreferencesRepository.updateFamilyRole(role) }
+                        }
+                    )
+                }
             }
         }
         if (currentDestination == DrawerDestination.Settings && showDatePicker) {
@@ -569,13 +570,16 @@ private fun SettingsContent(
                 text = stringResource(id = R.string.settings_notifications_title),
                 style = MaterialTheme.typography.titleLarge
             )
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(top = 16.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(end = 72.dp)
+                ) {
                     Text(
                         text = stringResource(id = R.string.reminder_toggle_title),
                         style = MaterialTheme.typography.titleMedium
@@ -592,7 +596,8 @@ private fun SettingsContent(
                     colors = SwitchDefaults.colors(
                         checkedTrackColor = MaterialTheme.colorScheme.primary,
                         checkedThumbColor = MaterialTheme.colorScheme.onPrimary
-                    )
+                    ),
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
             if (showPermissionRationale) {
@@ -706,105 +711,110 @@ private fun OnboardingFlow(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 32.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = stringResource(id = R.string.onboarding_step_progress, step + 1, totalSteps),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        when (step) {
-            0 -> {
-                Text(
-                    text = stringResource(id = R.string.onboarding_welcome_title),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-                Text(
-                    text = stringResource(id = R.string.onboarding_welcome_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = stringResource(id = R.string.onboarding_role_prompt),
-                    style = MaterialTheme.typography.titleMedium
-                )
-                FamilyRoleSelection(
-                    selectedRole = selectedRole,
-                    onSelectRole = { role ->
-                        selectedRole = role
-                        onSelectFamilyRole(role)
-                    },
-                    modifier = Modifier.padding(top = 16.dp)
-                )
-            }
-            1 -> {
-                Text(
-                    text = stringResource(id = R.string.onboarding_due_date_title),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-                Text(
-                    text = stringResource(id = R.string.onboarding_due_date_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                DatePicker(state = datePickerState)
-            }
-            2 -> {
-                Text(
-                    text = stringResource(id = R.string.onboarding_notifications_title),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-                Text(
-                    text = stringResource(id = R.string.onboarding_notifications_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(id = R.string.reminder_toggle_title),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = stringResource(id = R.string.reminder_toggle_description),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                    Switch(
-                        checked = remindersEnabled,
-                        onCheckedChange = onReminderToggle,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    )
-                }
-                Text(
-                    text = stringResource(id = R.string.onboarding_notifications_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-                if (showPermissionRationale) {
+        Column {
+            Text(
+                text = stringResource(id = R.string.onboarding_step_progress, step + 1, totalSteps),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            when (step) {
+                0 -> {
                     Text(
-                        text = stringResource(id = R.string.notifications_permission_rationale),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                        text = stringResource(id = R.string.onboarding_welcome_title),
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    Text(
+                        text = stringResource(id = R.string.onboarding_welcome_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp)
                     )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = stringResource(id = R.string.onboarding_role_prompt),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    FamilyRoleSelection(
+                        selectedRole = selectedRole,
+                        onSelectRole = { role ->
+                            selectedRole = role
+                            onSelectFamilyRole(role)
+                        },
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
+                }
+                1 -> {
+                    Text(
+                        text = stringResource(id = R.string.onboarding_due_date_title),
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    Text(
+                        text = stringResource(id = R.string.onboarding_due_date_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    DatePicker(state = datePickerState)
+                }
+                2 -> {
+                    Text(
+                        text = stringResource(id = R.string.onboarding_notifications_title),
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    Text(
+                        text = stringResource(id = R.string.onboarding_notifications_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(end = 72.dp)
+                        ) {
+                            Text(
+                                text = stringResource(id = R.string.reminder_toggle_title),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(id = R.string.reminder_toggle_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        Switch(
+                            checked = remindersEnabled,
+                            onCheckedChange = onReminderToggle,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier.align(Alignment.CenterEnd)
+                        )
+                    }
+                    Text(
+                        text = stringResource(id = R.string.onboarding_notifications_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                    if (showPermissionRationale) {
+                        Text(
+                            text = stringResource(id = R.string.notifications_permission_rationale),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
             }
         }
-        Spacer(modifier = Modifier.weight(1f))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             if (step > 0) {
                 TextButton(onClick = { step -= 1 }) {
@@ -813,7 +823,6 @@ private fun OnboardingFlow(
             } else {
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Spacer(modifier = Modifier.weight(1f))
             Button(
                 onClick = {
                     when (step) {

@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -71,6 +73,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -88,6 +92,8 @@ import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
 import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
+import com.example.babydevelopmenttracker.ui.theme.ThemePreference
+import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -99,29 +105,48 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            BabyDevelopmentTrackerTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    BabyDevelopmentTrackerScreen()
-                }
-            }
+            BabyDevelopmentTrackerApp()
         }
     }
 }
+
+// Most anatomy scans that reveal a baby’s sex happen around week 18.
+private const val GENDER_REVEAL_WEEK = 18
 
 private enum class DrawerDestination { Home, Settings }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BabyDevelopmentTrackerScreen() {
+fun BabyDevelopmentTrackerApp() {
     val context = LocalContext.current
     val userPreferencesRepository = remember(context) { UserPreferencesRepository(context) }
     val reminderScheduler = remember(context) { WeeklyReminderScheduler(context) }
     val userPreferences by userPreferencesRepository.userPreferences.collectAsState(
         initial = UserPreferences()
     )
+
+    BabyDevelopmentTrackerTheme(themePreference = userPreferences.themePreference) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            BabyDevelopmentTrackerScreen(
+                userPreferences = userPreferences,
+                userPreferencesRepository = userPreferencesRepository,
+                reminderScheduler = reminderScheduler
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BabyDevelopmentTrackerScreen(
+    userPreferences: UserPreferences,
+    userPreferencesRepository: UserPreferencesRepository,
+    reminderScheduler: WeeklyReminderScheduler
+) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
@@ -130,6 +155,7 @@ fun BabyDevelopmentTrackerScreen() {
     val remindersEnabled = userPreferences.remindersEnabled
     val familyRole = userPreferences.familyRole
     val onboardingCompleted = userPreferences.onboardingCompleted
+    val themePreference = userPreferences.themePreference
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
     var showDatePicker by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
@@ -299,6 +325,12 @@ fun BabyDevelopmentTrackerScreen() {
                         familyRole = familyRole,
                         onFamilyRoleSelected = { role ->
                             scope.launch { userPreferencesRepository.updateFamilyRole(role) }
+                        },
+                        themePreference = themePreference,
+                        onThemePreferenceSelected = { preference ->
+                            scope.launch {
+                                userPreferencesRepository.updateThemePreference(preference)
+                            }
                         }
                     )
                 }
@@ -578,6 +610,8 @@ private fun SettingsContent(
     onSelectDueDate: () -> Unit,
     familyRole: FamilyRole?,
     onFamilyRoleSelected: (FamilyRole) -> Unit,
+    themePreference: ThemePreference,
+    onThemePreferenceSelected: (ThemePreference) -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -643,6 +677,24 @@ private fun SettingsContent(
 
         Column {
             Text(
+                text = stringResource(id = R.string.settings_theme_title),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = stringResource(id = R.string.settings_theme_description),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            ThemeSelection(
+                selectedTheme = themePreference,
+                onThemeSelected = onThemePreferenceSelected,
+                calculatedWeek = calculatedWeek,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+        }
+
+        Column {
+            Text(
                 text = stringResource(id = R.string.settings_notifications_title),
                 style = MaterialTheme.typography.titleLarge
             )
@@ -685,6 +737,105 @@ private fun SettingsContent(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
+        }
+    }
+}
+
+
+@Composable
+private fun ThemeSelection(
+    selectedTheme: ThemePreference,
+    onThemeSelected: (ThemePreference) -> Unit,
+    calculatedWeek: Int?,
+    modifier: Modifier = Modifier
+) {
+    val genderThemesUnlocked = calculatedWeek != null && calculatedWeek >= GENDER_REVEAL_WEEK
+    val availableThemes = remember(genderThemesUnlocked, selectedTheme) {
+        val baseThemes = if (genderThemesUnlocked) {
+            ThemePreference.entries.toList()
+        } else {
+            listOf(ThemePreference.Neutral)
+        }
+        if (baseThemes.contains(selectedTheme)) baseThemes else baseThemes + selectedTheme
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        availableThemes.forEach { theme ->
+            ThemeOptionCard(
+                themePreference = theme,
+                isSelected = theme == selectedTheme,
+                enabled = genderThemesUnlocked || theme == ThemePreference.Neutral,
+                onSelect = { onThemeSelected(theme) }
+            )
+        }
+
+        if (!genderThemesUnlocked) {
+            val message = if (calculatedWeek == null) {
+                stringResource(id = R.string.settings_theme_locked_message_due_date)
+            } else {
+                stringResource(id = R.string.settings_theme_locked_message_week, GENDER_REVEAL_WEEK)
+            }
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeOptionCard(
+    themePreference: ThemePreference,
+    isSelected: Boolean,
+    enabled: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val previewColors = remember(themePreference) { themePreviewColors(themePreference) }
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    }
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.6f)
+            .clickable(enabled = enabled, onClick = onSelect),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        tonalElevation = if (isSelected) 2.dp else 0.dp,
+        border = BorderStroke(width = if (isSelected) 1.5.dp else 1.dp, color = borderColor)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                previewColors.forEach { color ->
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(color)
+                    )
+                }
+            }
+            Text(
+                text = stringResource(id = themePreference.titleRes),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            Text(
+                text = stringResource(id = themePreference.descriptionRes),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
     }
 }

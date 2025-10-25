@@ -12,20 +12,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,8 +41,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
+import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -57,7 +69,20 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BabyDevelopmentTrackerScreen() {
+    val zoneId = remember { ZoneId.systemDefault() }
+    val today = remember { LocalDate.now(zoneId) }
     var selectedWeek by remember { mutableStateOf(20) }
+    var dueDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
+
+    val calculatedWeek = dueDate?.let { calculateWeekFromDueDate(it, today) }
+
+    LaunchedEffect(calculatedWeek) {
+        calculatedWeek?.let { selectedWeek = it }
+    }
+
     val weekInfo = BabyDevelopmentRepository.findWeek(selectedWeek)
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -79,6 +104,36 @@ fun BabyDevelopmentTrackerScreen() {
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Button(
+                onClick = { showDatePicker = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = stringResource(id = R.string.select_due_date))
+            }
+
+            Text(
+                text = dueDate?.let { date ->
+                    stringResource(
+                        id = R.string.selected_due_date_label,
+                        date.format(dateFormatter)
+                    )
+                } ?: stringResource(id = R.string.due_date_prompt),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            calculatedWeek?.let { week ->
+                Text(
+                    text = stringResource(id = R.string.estimated_week_label, week),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Text(
                 text = stringResource(id = R.string.week_selector_label, selectedWeek),
                 style = MaterialTheme.typography.titleMedium,
@@ -92,7 +147,7 @@ fun BabyDevelopmentTrackerScreen() {
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
                     activeTrackColor = MaterialTheme.colorScheme.primary
-                )
+                ),
             )
         }
 
@@ -166,6 +221,44 @@ fun BabyDevelopmentTrackerScreen() {
                     }
                 }
             }
+        }
+    }
+
+    if (showDatePicker) {
+        val defaultDueDate = remember { today.plusWeeks(20) }
+        val initialDate = dueDate ?: defaultDueDate
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialDate
+                .atStartOfDay(zoneId)
+                .toInstant()
+                .toEpochMilli()
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedMillis = datePickerState.selectedDateMillis
+                        if (selectedMillis != null) {
+                            val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                                .atZone(zoneId)
+                                .toLocalDate()
+                            dueDateEpochDay = selectedDate.toEpochDay()
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text(text = stringResource(id = R.string.date_picker_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(text = stringResource(id = R.string.date_picker_cancel))
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }

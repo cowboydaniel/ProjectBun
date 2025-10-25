@@ -8,7 +8,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -71,8 +75,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.example.babydevelopmenttracker.data.ReminderPreferences
-import com.example.babydevelopmenttracker.data.ReminderPreferencesRepository
+import com.example.babydevelopmenttracker.data.FamilyRole
+import com.example.babydevelopmenttracker.data.UserPreferences
+import com.example.babydevelopmenttracker.data.UserPreferencesRepository
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
 import com.example.babydevelopmenttracker.model.FetalGrowthPoint
 import com.example.babydevelopmenttracker.model.FetalGrowthTrends
@@ -109,17 +114,19 @@ private enum class DrawerDestination { Home, Settings }
 @Composable
 fun BabyDevelopmentTrackerScreen() {
     val context = LocalContext.current
-    val reminderRepository = remember(context) { ReminderPreferencesRepository(context) }
+    val userPreferencesRepository = remember(context) { UserPreferencesRepository(context) }
     val reminderScheduler = remember(context) { WeeklyReminderScheduler(context) }
-    val reminderPreferences by reminderRepository.reminderPreferences.collectAsState(
-        initial = ReminderPreferences()
+    val userPreferences by userPreferencesRepository.userPreferences.collectAsState(
+        initial = UserPreferences()
     )
     val scope = rememberCoroutineScope()
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
     var selectedWeek by remember { mutableStateOf(20) }
-    val dueDateEpochDay = reminderPreferences.dueDateEpochDay
-    val remindersEnabled = reminderPreferences.remindersEnabled
+    val dueDateEpochDay = userPreferences.dueDateEpochDay
+    val remindersEnabled = userPreferences.remindersEnabled
+    val familyRole = userPreferences.familyRole
+    val onboardingCompleted = userPreferences.onboardingCompleted
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
     var showDatePicker by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
@@ -148,16 +155,70 @@ fun BabyDevelopmentTrackerScreen() {
         if (granted) {
             showPermissionRationale = false
             scope.launch {
-                reminderRepository.updateReminderEnabled(true)
+                userPreferencesRepository.updateReminderEnabled(true)
+                reminderScheduler.scheduleWeeklyReminder(userPreferences.dueDateEpochDay)
             }
         } else {
             showPermissionRationale = true
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
+    val handleReminderToggle: (Boolean) -> Unit = { isChecked ->
+        if (isChecked) {
+            val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+
+            if (needsPermission) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                showPermissionRationale = false
+                scope.launch {
+                    userPreferencesRepository.updateReminderEnabled(true)
+                    reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
+                }
+            }
+        } else {
+            showPermissionRationale = false
+            scope.launch {
+                userPreferencesRepository.updateReminderEnabled(false)
+                reminderScheduler.cancelWeeklyReminder()
+            }
+        }
+    }
+
+    if (!onboardingCompleted) {
+        OnboardingFlow(
+            familyRole = familyRole,
+            dueDate = dueDate,
+            zoneId = zoneId,
+            today = today,
+            remindersEnabled = remindersEnabled,
+            onSelectFamilyRole = { role ->
+                showPermissionRationale = false
+                scope.launch { userPreferencesRepository.updateFamilyRole(role) }
+            },
+            onConfirmDueDate = { date ->
+                scope.launch {
+                    val epochDay = date.toEpochDay()
+                    userPreferencesRepository.updateDueDate(epochDay)
+                    if (remindersEnabled) {
+                        reminderScheduler.scheduleWeeklyReminder(epochDay)
+                    }
+                }
+            },
+            onReminderToggle = handleReminderToggle,
+            onFinish = {
+                scope.launch { userPreferencesRepository.updateOnboardingCompleted(true) }
+            },
+            showPermissionRationale = showPermissionRationale
+        )
+    } else {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
             ModalDrawerSheet {
                 Text(
                     text = stringResource(id = R.string.app_name),
@@ -184,7 +245,7 @@ fun BabyDevelopmentTrackerScreen() {
                 )
             }
         }
-    ) {
+        ) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -219,7 +280,8 @@ fun BabyDevelopmentTrackerScreen() {
                     onWeekChange = { selectedWeek = it },
                     dueDate = dueDate,
                     dateFormatter = dateFormatter,
-                    calculatedWeek = calculatedWeek
+                    calculatedWeek = calculatedWeek,
+                    familyRole = familyRole
                 )
                 DrawerDestination.Settings -> SettingsContent(
                     modifier = Modifier.padding(innerPadding),
@@ -227,79 +289,58 @@ fun BabyDevelopmentTrackerScreen() {
                     dateFormatter = dateFormatter,
                     calculatedWeek = calculatedWeek,
                     remindersEnabled = remindersEnabled,
-                    onReminderToggle = { isChecked ->
-                        if (isChecked) {
-                            val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.POST_NOTIFICATIONS
-                                ) != PackageManager.PERMISSION_GRANTED
-
-                            if (needsPermission) {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                showPermissionRationale = false
-                                scope.launch {
-                                    reminderRepository.updateReminderEnabled(true)
-                                    reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
-                                }
-                            }
-                        } else {
-                            showPermissionRationale = false
-                            scope.launch {
-                                reminderRepository.updateReminderEnabled(false)
-                                reminderScheduler.cancelWeeklyReminder()
-                            }
-                        }
-                    },
+                    onReminderToggle = handleReminderToggle,
                     showPermissionRationale = showPermissionRationale,
-                    onSelectDueDate = { showDatePicker = true }
+                    onSelectDueDate = { showDatePicker = true },
+                    familyRole = familyRole,
+                    onFamilyRoleSelected = { role ->
+                        scope.launch { userPreferencesRepository.updateFamilyRole(role) }
+                    }
                 )
             }
         }
-    }
+        if (currentDestination == DrawerDestination.Settings && showDatePicker) {
+            val defaultDueDate = remember { today.plusWeeks(20) }
+            val initialDate = dueDate ?: defaultDueDate
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = initialDate
+                    .atStartOfDay(zoneId)
+                    .toInstant()
+                    .toEpochMilli()
+            )
 
-    if (currentDestination == DrawerDestination.Settings && showDatePicker) {
-        val defaultDueDate = remember { today.plusWeeks(20) }
-        val initialDate = dueDate ?: defaultDueDate
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = initialDate
-                .atStartOfDay(zoneId)
-                .toInstant()
-                .toEpochMilli()
-        )
-
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val selectedMillis = datePickerState.selectedDateMillis
-                        if (selectedMillis != null) {
-                            val selectedDate = Instant.ofEpochMilli(selectedMillis)
-                                .atZone(zoneId)
-                                .toLocalDate()
-                            scope.launch {
-                                val epochDay = selectedDate.toEpochDay()
-                                reminderRepository.updateDueDate(epochDay)
-                                if (remindersEnabled) {
-                                    reminderScheduler.scheduleWeeklyReminder(epochDay)
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val selectedMillis = datePickerState.selectedDateMillis
+                            if (selectedMillis != null) {
+                                val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                                    .atZone(zoneId)
+                                    .toLocalDate()
+                                scope.launch {
+                                    val epochDay = selectedDate.toEpochDay()
+                                    userPreferencesRepository.updateDueDate(epochDay)
+                                    if (remindersEnabled) {
+                                        reminderScheduler.scheduleWeeklyReminder(epochDay)
+                                    }
                                 }
                             }
+                            showDatePicker = false
                         }
-                        showDatePicker = false
+                    ) {
+                        Text(text = stringResource(id = R.string.date_picker_confirm))
                     }
-                ) {
-                    Text(text = stringResource(id = R.string.date_picker_confirm))
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) {
+                        Text(text = stringResource(id = R.string.date_picker_cancel))
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text(text = stringResource(id = R.string.date_picker_cancel))
-                }
+            ) {
+                DatePicker(state = datePickerState)
             }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 }
@@ -311,7 +352,8 @@ private fun HomeContent(
     onWeekChange: (Int) -> Unit,
     dueDate: LocalDate?,
     dateFormatter: DateTimeFormatter,
-    calculatedWeek: Int?
+    calculatedWeek: Int?,
+    familyRole: FamilyRole?,
 ) {
     val weekInfo = remember(selectedWeek) { BabyDevelopmentRepository.findWeek(selectedWeek) }
 
@@ -325,6 +367,15 @@ private fun HomeContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                familyRole?.let { role ->
+                    val roleLabel = stringResource(id = role.labelRes)
+                    Text(
+                        text = stringResource(id = R.string.home_greeting, roleLabel),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
                 Text(
                     text = dueDate?.let { date ->
                         stringResource(
@@ -447,7 +498,9 @@ private fun SettingsContent(
     remindersEnabled: Boolean,
     onReminderToggle: (Boolean) -> Unit,
     showPermissionRationale: Boolean,
-    onSelectDueDate: () -> Unit
+    onSelectDueDate: () -> Unit,
+    familyRole: FamilyRole?,
+    onFamilyRoleSelected: (FamilyRole) -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -456,6 +509,23 @@ private fun SettingsContent(
             .padding(horizontal = 24.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
+        Column {
+            Text(
+                text = stringResource(id = R.string.settings_family_role_title),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = stringResource(id = R.string.settings_family_role_description),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            FamilyRoleSelection(
+                selectedRole = familyRole,
+                onSelectRole = onFamilyRoleSelected,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+        }
+
         Column {
             Text(
                 text = stringResource(id = R.string.settings_due_date_title),
@@ -532,6 +602,239 @@ private fun SettingsContent(
                     color = MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Start,
                     modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun FamilyRoleSelection(
+    selectedRole: FamilyRole?,
+    onSelectRole: (FamilyRole) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        FamilyRole.entries.forEach { role ->
+            FamilyRoleOptionCard(
+                role = role,
+                isSelected = role == selectedRole,
+                onSelect = { onSelectRole(role) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FamilyRoleOptionCard(
+    role: FamilyRole,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    }
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelect),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        tonalElevation = if (isSelected) 2.dp else 0.dp,
+        border = BorderStroke(width = if (isSelected) 1.5.dp else 1.dp, color = borderColor)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(id = role.labelRes),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
+            Text(
+                text = stringResource(id = role.descriptionRes),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OnboardingFlow(
+    familyRole: FamilyRole?,
+    dueDate: LocalDate?,
+    zoneId: ZoneId,
+    today: LocalDate,
+    remindersEnabled: Boolean,
+    onSelectFamilyRole: (FamilyRole) -> Unit,
+    onConfirmDueDate: (LocalDate) -> Unit,
+    onReminderToggle: (Boolean) -> Unit,
+    onFinish: () -> Unit,
+    showPermissionRationale: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val totalSteps = 3
+    var step by remember { mutableStateOf(0) }
+    val defaultDueDate = remember(today) { today.plusWeeks(20) }
+    val initialDueDateMillis = remember(dueDate, defaultDueDate, zoneId) {
+        (dueDate ?: defaultDueDate).atStartOfDay(zoneId).toInstant().toEpochMilli()
+    }
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDueDateMillis)
+    LaunchedEffect(initialDueDateMillis) {
+        datePickerState.selectedDateMillis = initialDueDateMillis
+    }
+    var selectedRole by remember(familyRole) { mutableStateOf(familyRole) }
+
+    val selectedDate = datePickerState.selectedDateMillis?.let { millis ->
+        Instant.ofEpochMilli(millis).atZone(zoneId).toLocalDate()
+    }
+
+    val canProceed = when (step) {
+        0 -> selectedRole != null
+        1 -> selectedDate != null
+        else -> true
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp, vertical = 32.dp),
+    ) {
+        Text(
+            text = stringResource(id = R.string.onboarding_step_progress, step + 1, totalSteps),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        when (step) {
+            0 -> {
+                Text(
+                    text = stringResource(id = R.string.onboarding_welcome_title),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+                Text(
+                    text = stringResource(id = R.string.onboarding_welcome_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = stringResource(id = R.string.onboarding_role_prompt),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                FamilyRoleSelection(
+                    selectedRole = selectedRole,
+                    onSelectRole = { role ->
+                        selectedRole = role
+                        onSelectFamilyRole(role)
+                    },
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+            1 -> {
+                Text(
+                    text = stringResource(id = R.string.onboarding_due_date_title),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+                Text(
+                    text = stringResource(id = R.string.onboarding_due_date_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                DatePicker(state = datePickerState)
+            }
+            2 -> {
+                Text(
+                    text = stringResource(id = R.string.onboarding_notifications_title),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+                Text(
+                    text = stringResource(id = R.string.onboarding_notifications_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(id = R.string.reminder_toggle_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = stringResource(id = R.string.reminder_toggle_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    Switch(
+                        checked = remindersEnabled,
+                        onCheckedChange = onReminderToggle,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                }
+                Text(
+                    text = stringResource(id = R.string.onboarding_notifications_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+                if (showPermissionRationale) {
+                    Text(
+                        text = stringResource(id = R.string.notifications_permission_rationale),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (step > 0) {
+                TextButton(onClick = { step -= 1 }) {
+                    Text(text = stringResource(id = R.string.onboarding_back))
+                }
+            } else {
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = {
+                    when (step) {
+                        0 -> if (selectedRole != null) {
+                            step += 1
+                        }
+                        1 -> selectedDate?.let {
+                            onConfirmDueDate(it)
+                            step += 1
+                        }
+                        2 -> onFinish()
+                    }
+                },
+                enabled = canProceed
+            ) {
+                Text(
+                    text = if (step == totalSteps - 1) {
+                        stringResource(id = R.string.onboarding_finish)
+                    } else {
+                        stringResource(id = R.string.onboarding_next)
+                    }
                 )
             }
         }

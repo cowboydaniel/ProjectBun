@@ -10,8 +10,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.babydevelopmenttracker.MainActivity
 import com.example.babydevelopmenttracker.R
-import com.example.babydevelopmenttracker.data.ReminderPreferencesKeys
-import com.example.babydevelopmenttracker.data.reminderPreferencesDataStore
+import com.example.babydevelopmenttracker.data.UserPreferencesKeys
+import com.example.babydevelopmenttracker.data.userPreferencesDataStore
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
 import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
@@ -25,8 +25,8 @@ class WeeklyReminderWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        val preferences = applicationContext.reminderPreferencesDataStore.data.first()
-        val remindersEnabled = preferences[ReminderPreferencesKeys.REMINDER_ENABLED] ?: false
+        val preferences = applicationContext.userPreferencesDataStore.data.first()
+        val remindersEnabled = preferences[UserPreferencesKeys.REMINDER_ENABLED] ?: false
         if (!remindersEnabled) {
             return Result.success()
         }
@@ -36,7 +36,7 @@ class WeeklyReminderWorker(
             return Result.success()
         }
 
-        val dueDateEpochDay = preferences[ReminderPreferencesKeys.DUE_DATE_EPOCH_DAY]
+        val dueDateEpochDay = preferences[UserPreferencesKeys.DUE_DATE_EPOCH_DAY]
         val zoneId = ZoneId.systemDefault()
         val today = LocalDate.now(zoneId)
         val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)

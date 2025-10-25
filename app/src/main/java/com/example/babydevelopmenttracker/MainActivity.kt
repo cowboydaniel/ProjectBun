@@ -504,11 +504,13 @@ fun BabyDevelopmentTrackerScreen(
                     ) {
                         Text(text = stringResource(id = R.string.date_picker_confirm))
                     }
+                    Unit
                 },
                 dismissButton = {
                     TextButton(onClick = { showDatePicker = false }) {
                         Text(text = stringResource(id = R.string.date_picker_cancel))
                     }
+                    Unit
                 }
             ) {
                 DatePicker(state = datePickerState)

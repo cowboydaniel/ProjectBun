@@ -20,7 +20,7 @@ Deliver an approachable Android companion for expectant parents that provides ti
 ### 🧭 Phase 3 – Personalization & Insights
 - [x] Allow users to input due date and automatically surface the current pregnancy week.
 - [x] Provide optional reminders or push notifications for weekly check-ins.
-- Integrate data visualization for trends (e.g., size comparisons, milestone timelines).
+- [x] Integrate data visualization for trends (e.g., size comparisons, milestone timelines).
 - Offer evidence-backed resources from reputable organizations with outbound links.
 
 ### 🌐 Phase 4 – Community & Support Ecosystem

@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -46,16 +47,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
 import com.example.babydevelopmenttracker.data.ReminderPreferences
 import com.example.babydevelopmenttracker.data.ReminderPreferencesRepository
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
 import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
+import com.example.babydevelopmenttracker.model.FetalGrowthPoint
+import com.example.babydevelopmenttracker.model.FetalGrowthTrends
 import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import java.time.Instant
@@ -268,6 +277,9 @@ fun BabyDevelopmentTrackerScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
+                    GrowthTrendCard(selectedWeek = selectedWeek)
+                }
+                item {
                     HighlightCard(
                         title = stringResource(id = R.string.development_heading),
                         highlights = info.babyHighlights
@@ -398,6 +410,145 @@ fun HighlightCard(title: String, highlights: List<String>) {
                     text = "• $highlight",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = if (index == 0) Modifier else Modifier.padding(top = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun GrowthTrendCard(selectedWeek: Int) {
+    val growthPoints = remember { FetalGrowthTrends.weeklyGrowth }
+    val highlightPoint = remember(selectedWeek) {
+        FetalGrowthTrends.findClosestWeek(selectedWeek)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(id = R.string.growth_trends_heading),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(id = R.string.growth_trends_overview),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            GrowthTrendChart(points = growthPoints, highlightPoint = highlightPoint)
+            highlightPoint?.let { point ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(id = R.string.week_selector_label, point.week),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(id = R.string.growth_trends_length, point.lengthCm),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = stringResource(id = R.string.growth_trends_weight, point.weightG),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun GrowthTrendChart(
+    points: List<FetalGrowthPoint>,
+    highlightPoint: FetalGrowthPoint?,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val paddingHorizontal = with(density) { 16.dp.toPx() }
+    val paddingVertical = with(density) { 20.dp.toPx() }
+    val axisStrokeWidth = with(density) { 1.dp.toPx() }
+    val lineStrokeWidth = with(density) { 3.dp.toPx() }
+    val highlightRadius = with(density) { 6.dp.toPx() }
+    val highlightOutlineRadius = with(density) { 12.dp.toPx() }
+    val highlightOutlineStroke = with(density) { 2.dp.toPx() }
+    val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+    val lineColor = MaterialTheme.colorScheme.primary
+    val highlightColor = MaterialTheme.colorScheme.secondary
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(180.dp)
+    ) {
+        if (points.isEmpty()) return@Canvas
+
+        val usableWidth = size.width - paddingHorizontal * 2f
+        val usableHeight = size.height - paddingVertical * 2f
+        if (usableWidth <= 0f || usableHeight <= 0f) return@Canvas
+
+        val minLength = points.minOf { it.lengthCm }
+        val maxLength = points.maxOf { it.lengthCm }
+        val lengthRange = (maxLength - minLength).takeIf { it != 0f } ?: 1f
+
+        val xStep = if (points.size > 1) usableWidth / (points.size - 1) else 0f
+
+        fun offsetFor(index: Int, length: Float): Offset {
+            val x = paddingHorizontal + (xStep * index)
+            val normalized = (length - minLength) / lengthRange
+            val y = paddingVertical + usableHeight - (normalized * usableHeight)
+            return Offset(x, y)
+        }
+
+        drawLine(
+            color = axisColor,
+            start = Offset(paddingHorizontal, paddingVertical + usableHeight),
+            end = Offset(paddingHorizontal + usableWidth, paddingVertical + usableHeight),
+            strokeWidth = axisStrokeWidth
+        )
+
+        drawLine(
+            color = axisColor,
+            start = Offset(paddingHorizontal, paddingVertical),
+            end = Offset(paddingHorizontal, paddingVertical + usableHeight),
+            strokeWidth = axisStrokeWidth
+        )
+
+        val trendPath = Path()
+        points.forEachIndexed { index, point ->
+            val pointOffset = offsetFor(index, point.lengthCm)
+            if (index == 0) {
+                trendPath.moveTo(pointOffset.x, pointOffset.y)
+            } else {
+                trendPath.lineTo(pointOffset.x, pointOffset.y)
+            }
+        }
+
+        drawPath(
+            path = trendPath,
+            color = lineColor,
+            style = Stroke(width = lineStrokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        highlightPoint?.let { point ->
+            val highlightIndex = points.indexOfFirst { it.week == point.week }
+            if (highlightIndex >= 0) {
+                val highlightOffset = offsetFor(highlightIndex, point.lengthCm)
+                drawCircle(
+                    color = highlightColor,
+                    radius = highlightOutlineRadius,
+                    center = highlightOffset,
+                    style = Stroke(width = highlightOutlineStroke)
+                )
+                drawCircle(
+                    color = highlightColor,
+                    radius = highlightRadius,
+                    center = highlightOffset
                 )
             }
         }

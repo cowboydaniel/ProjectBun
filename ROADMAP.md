@@ -12,7 +12,7 @@ Empower new and expecting parents with a trustworthy, delightful Android compani
 
 ### Wave 1 – Guided Foundations
 - [x] Create a guided onboarding flow that captures due date, family role, and notification preferences in under two minutes.
-- [ ] Build a "Today" dashboard that combines current week highlights, doctor checklist items, and partner suggestions.
+- [x] Build a "Today" dashboard that combines current week highlights, doctor checklist items, and partner suggestions.
 - [ ] Introduce a library of calming audio affirmations categorized by trimester and mood.
 - [ ] Ship offline-first caching for core weekly content with background refresh once connectivity returns.
 

@@ -657,6 +657,116 @@ object BabyDevelopmentRepository {
                 )
             }
         }
+
+    private val trimesterChecklist = mapOf(
+        1 to listOf(
+            "Review prenatal vitamins and any supplements with your care team.",
+            "Note questions about early symptoms to discuss at your next visit.",
+            "Schedule routine bloodwork or screening recommended for this trimester."
+        ),
+        2 to listOf(
+            "Check in on anatomy scan scheduling and insurance coverage.",
+            "Track weight, blood pressure, and any new symptoms between visits.",
+            "Confirm childbirth education or hospital orientation dates."
+        ),
+        3 to listOf(
+            "Review birth preferences and discuss them with your provider.",
+            "Finalize pediatrician selection and newborn care questions.",
+            "Monitor fetal movement patterns and call if anything feels off."
+        )
+    )
+
+    private val specificChecklist = mapOf(
+        12 to listOf(
+            "Complete first trimester screening follow-ups if ordered.",
+            "Plan your next prenatal appointment around week 16."
+        ),
+        20 to listOf(
+            "Attend the detailed anatomy ultrasound if it is scheduled this week.",
+            "Discuss any travel plans with your provider before booking."
+        ),
+        28 to listOf(
+            "Complete glucose screening and review third trimester lab work.",
+            "Ask about Tdap and flu vaccines if you have not received them yet."
+        ),
+        36 to listOf(
+            "Confirm group B strep testing and understand next steps.",
+            "Review signs of labor and when to head to your birth location."
+        ),
+        40 to listOf(
+            "Discuss post-dates monitoring plans and induction options.",
+            "Ask how often to come in for non-stress tests if still pregnant."
+        )
+    )
+
+    private val trimesterSupportIdeas = mapOf(
+        1 to listOf(
+            "Prep easy snacks, ginger tea, or lemon water to help with nausea.",
+            "Offer to handle chores when fatigue peaks in the evenings.",
+            "Join prenatal appointments to hear guidance first-hand if invited."
+        ),
+        2 to listOf(
+            "Plan a relaxing outing that works with renewed energy levels.",
+            "Help track appointment dates and organize shared calendars.",
+            "Check in about how to support changing body comfort needs."
+        ),
+        3 to listOf(
+            "Create a calm space at home for rest and late-pregnancy routines.",
+            "Stay on top of nursery or supply prep without pressuring timelines.",
+            "Practice labor comfort techniques together from any birth classes."
+        )
+    )
+
+    private val specificSupportIdeas = mapOf(
+        14 to listOf(
+            "Celebrate entering the second trimester with a favorite meal or walk."
+        ),
+        24 to listOf(
+            "Help research childcare or parental leave logistics together."
+        ),
+        30 to listOf(
+            "Assemble a go-bag checklist and start packing shared essentials."
+        ),
+        38 to listOf(
+            "Keep the car fueled and routes planned for the hospital or birthing center."
+        ),
+        41 to listOf(
+            "Encourage rest and offer reassurance while waiting for labor to begin."
+        )
+    )
+
+    fun doctorChecklistForWeek(week: Int): List<String> {
+        val trimester = when (week) {
+            in 4..13 -> 1
+            in 14..27 -> 2
+            in 28..42 -> 3
+            else -> null
+        }
+
+        val base = trimester?.let { trimesterChecklist[it] }.orEmpty()
+        val specific = specificChecklist[week].orEmpty()
+
+        return (specific + base).ifEmpty { DEFAULT_TIPS }
+    }
+
+    fun partnerSupportForWeek(week: Int): List<String> {
+        val trimester = when (week) {
+            in 4..13 -> 1
+            in 14..27 -> 2
+            in 28..42 -> 3
+            else -> null
+        }
+
+        val base = trimester?.let { trimesterSupportIdeas[it] }.orEmpty()
+        val specific = specificSupportIdeas[week].orEmpty()
+
+        return (specific + base).ifEmpty {
+            listOf(
+                "Check in with encouraging messages and see what support would feel best today.",
+                "Celebrate the milestones already reached together."
+            )
+        }
+    }
 }
 
 fun BabyDevelopmentRepository.findWeek(week: Int): BabyDevelopmentWeek? =

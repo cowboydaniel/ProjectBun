@@ -113,5 +113,5 @@
     <string name="onboarding_partner_code_description">Ask the expectant parent for their invite code so we can match their due date.</string>
     <string name="onboarding_partner_code_placeholder">Type the invite code</string>
     <string name="onboarding_partner_code_error">We couldn’t verify that code. Check it and try again.</string>
-    <string name="google_sign_in_server_client_id" translatable="false">YOUR_WEB_CLIENT_ID.apps.googleusercontent.com</string>
+    <string name="google_sign_in_server_client_id" translatable="false">633549776297-j7uskpsa9vg2555dsl768ghsdg48fi8n.apps.googleusercontent.com</string>
 </resources>

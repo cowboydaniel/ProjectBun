@@ -26,7 +26,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -57,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -357,6 +360,12 @@ private fun HomeContent(
     familyRole: FamilyRole?,
 ) {
     val weekInfo = remember(selectedWeek) { BabyDevelopmentRepository.findWeek(selectedWeek) }
+    val doctorChecklist = remember(selectedWeek) {
+        BabyDevelopmentRepository.doctorChecklistForWeek(selectedWeek)
+    }
+    val partnerSupport = remember(selectedWeek) {
+        BabyDevelopmentRepository.partnerSupportForWeek(selectedWeek)
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -418,13 +427,22 @@ private fun HomeContent(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = stringResource(id = R.string.today_dashboard_title),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = stringResource(id = R.string.today_dashboard_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
 
         weekInfo?.let { info ->
-            item {
-                GrowthTrendCard(selectedWeek = selectedWeek)
-            }
             item {
                 HighlightCard(
                     title = stringResource(id = R.string.development_heading),
@@ -442,6 +460,25 @@ private fun HomeContent(
                     title = stringResource(id = R.string.tips_heading),
                     highlights = info.tips
                 )
+            }
+            item {
+                ChecklistCard(
+                    title = stringResource(id = R.string.doctor_checklist_heading),
+                    subtitle = stringResource(id = R.string.doctor_checklist_description),
+                    emptyStateText = stringResource(id = R.string.doctor_checklist_empty),
+                    items = doctorChecklist
+                )
+            }
+            item {
+                PartnerSupportCard(
+                    title = stringResource(id = R.string.partner_support_heading),
+                    subtitle = stringResource(id = R.string.partner_support_description),
+                    emptyStateText = stringResource(id = R.string.partner_support_empty),
+                    items = partnerSupport
+                )
+            }
+            item {
+                GrowthTrendCard(selectedWeek = selectedWeek)
             }
             item {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -872,6 +909,127 @@ fun HighlightCard(title: String, highlights: List<String>) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = if (index == 0) Modifier else Modifier.padding(top = 6.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun ChecklistCard(
+    title: String,
+    subtitle: String,
+    emptyStateText: String,
+    items: List<String>,
+    modifier: Modifier = Modifier
+) {
+    val checklistState = remember(items) {
+        mutableStateMapOf<String, Boolean>().apply {
+            items.forEach { put(it, false) }
+        }
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            if (items.isEmpty()) {
+                Text(
+                    text = emptyStateText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                items.forEach { item ->
+                    val isChecked = checklistState[item] ?: false
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .clickable { checklistState[item] = !isChecked },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isChecked,
+                            onCheckedChange = { checked -> checklistState[item] = checked }
+                        )
+                        Text(
+                            text = item,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PartnerSupportCard(
+    title: String,
+    subtitle: String,
+    emptyStateText: String,
+    items: List<String>,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            if (items.isEmpty()) {
+                Text(
+                    text = emptyStateText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                items.forEachIndexed { index, item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = if (index == 0) 0.dp else 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Favorite,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = item,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 12.dp)
+                        )
+                    }
+                }
             }
         }
     }

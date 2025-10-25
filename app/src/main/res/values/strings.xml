@@ -7,6 +7,14 @@
     <string name="development_heading">Current Highlights</string>
     <string name="symptoms_heading">Parent Experience</string>
     <string name="tips_heading">Tips</string>
+    <string name="today_dashboard_title">Today&#8217;s dashboard</string>
+    <string name="today_dashboard_subtitle">A quick look at what matters most this week.</string>
+    <string name="doctor_checklist_heading">Doctor checklist</string>
+    <string name="doctor_checklist_description">Tick off the appointments and follow-ups you plan to cover soon.</string>
+    <string name="doctor_checklist_empty">No extra to-dos this week—keep following your provider’s guidance.</string>
+    <string name="partner_support_heading">Partner support ideas</string>
+    <string name="partner_support_description">Small gestures to keep you connected and helpful today.</string>
+    <string name="partner_support_empty">Check in and ask what kind of support would feel best right now.</string>
     <string name="select_due_date">Select due date</string>
     <string name="selected_due_date_label">Due date: %1$s</string>
     <string name="due_date_prompt">Choose a due date to jump to the current week.</string>

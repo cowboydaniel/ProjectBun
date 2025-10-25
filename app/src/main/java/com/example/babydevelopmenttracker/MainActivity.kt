@@ -2,11 +2,9 @@ package com.example.babydevelopmenttracker
 
 import android.Manifest
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -93,12 +91,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.credentials.ClearCredentialStateRequest
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
 import com.example.babydevelopmenttracker.data.FamilyRole
 import com.example.babydevelopmenttracker.data.PartnerInviteCode
 import com.example.babydevelopmenttracker.data.UserPreferences
@@ -112,18 +104,12 @@ import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
-import org.json.JSONObject
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,72 +121,7 @@ class MainActivity : ComponentActivity() {
 
 // Most anatomy scans that reveal a baby’s sex happen around week 18.
 private const val GENDER_REVEAL_WEEK = 18
-private const val GOOGLE_WEB_CLIENT_ID_PLACEHOLDER = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
-
 private enum class DrawerDestination { Home, Settings }
-
-private fun parseEmailFromIdToken(idToken: String?): String? {
-    if (idToken.isNullOrBlank()) {
-        return null
-    }
-    val segments = idToken.split('.')
-    if (segments.size < 2) {
-        return null
-    }
-
-    return try {
-        val payload = segments[1]
-        val decodedBytes = Base64.decode(
-            payload,
-            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
-        )
-        val payloadJson = JSONObject(String(decodedBytes, StandardCharsets.UTF_8))
-        payloadJson.optString("email").takeIf { it.isNotBlank() }
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private suspend fun requestGoogleIdTokenCredential(
-    credentialManager: CredentialManager,
-    activityContext: ComponentActivity,
-    requests: List<GetCredentialRequest>
-): GoogleIdTokenCredential? {
-    var lastCredentialException: GetCredentialException? = null
-    requests.forEach { request ->
-        try {
-            val response = credentialManager.getCredential(activityContext, request)
-            val credential = response.credential
-            val googleCredential = when (credential) {
-                is CustomCredential -> {
-                    when (credential.type) {
-                        GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL,
-                        GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_SIWG_CREDENTIAL -> {
-                            GoogleIdTokenCredential.createFrom(credential.data)
-                        }
-                        else -> null
-                    }
-                }
-                else -> null
-            }
-            if (googleCredential != null) {
-                return googleCredential
-            }
-        } catch (exception: GetCredentialCancellationException) {
-            throw exception
-        } catch (exception: GetCredentialException) {
-            lastCredentialException = exception
-        }
-    }
-    lastCredentialException?.let { throw it }
-    return null
-}
-
-private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
-    is ComponentActivity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -234,7 +155,6 @@ fun BabyDevelopmentTrackerScreen(
     reminderScheduler: WeeklyReminderScheduler
 ) {
     val context = LocalContext.current
-    val activityContext = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
@@ -244,161 +164,14 @@ fun BabyDevelopmentTrackerScreen(
     val familyRole = userPreferences.familyRole
     val onboardingCompleted = userPreferences.onboardingCompleted
     val themePreference = userPreferences.themePreference
-    val googleAccountName = userPreferences.googleAccountName
-    val googleAccountEmail = userPreferences.googleAccountEmail
-    val googleAccountId = userPreferences.googleAccountId
-    val isGoogleAccountLinked = !googleAccountId.isNullOrEmpty()
     val dueDateFromPartnerInvite = userPreferences.dueDateFromPartnerInvite
     val partnerLinkApproved = userPreferences.partnerLinkApproved
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
     var showDatePicker by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
-
-    val inviteCode = remember(dueDateEpochDay, isGoogleAccountLinked) {
-        if (isGoogleAccountLinked && dueDateEpochDay != null) {
-            PartnerInviteCode.generate(dueDateEpochDay)
-        } else {
-            null
-        }
-    }
-
-    val credentialManager = remember(context) { CredentialManager.create(context) }
-    val googleServerClientId = stringResource(id = R.string.google_sign_in_server_client_id)
-    val isGoogleSignInConfigured = remember(googleServerClientId) {
-        googleServerClientId.isNotBlank() &&
-            googleServerClientId != GOOGLE_WEB_CLIENT_ID_PLACEHOLDER
-    }
-    val googleSignInWithGoogleOption = remember(googleServerClientId, isGoogleSignInConfigured) {
-        if (isGoogleSignInConfigured) {
-            GetSignInWithGoogleOption.Builder(googleServerClientId).build()
-        } else {
-            null
-        }
-    }
-    val googleIdOption = remember(googleServerClientId, isGoogleSignInConfigured) {
-        if (isGoogleSignInConfigured) {
-            GetGoogleIdOption.Builder()
-                .setServerClientId(googleServerClientId)
-                .setFilterByAuthorizedAccounts(false)
-                .build()
-        } else {
-            null
-        }
-    }
-    val googleCombinedCredentialRequest = remember(googleSignInWithGoogleOption, googleIdOption) {
-        if (googleSignInWithGoogleOption != null && googleIdOption != null) {
-            GetCredentialRequest.Builder()
-                .addCredentialOption(googleSignInWithGoogleOption)
-                .addCredentialOption(googleIdOption)
-                .build()
-        } else {
-            null
-        }
-    }
-    val googleIdOnlyCredentialRequest = remember(googleIdOption) {
-        googleIdOption?.let { option ->
-            GetCredentialRequest.Builder()
-                .addCredentialOption(option)
-                .build()
-        }
-    }
-    val googleSignInOnlyCredentialRequest = remember(googleSignInWithGoogleOption) {
-        googleSignInWithGoogleOption?.let { option ->
-            GetCredentialRequest.Builder()
-                .addCredentialOption(option)
-                .build()
-        }
-    }
-    var googleSignInError by remember { mutableStateOf<String?>(null) }
-
-    val handleGoogleSignIn: () -> Unit = remember(
-        credentialManager,
-        googleCombinedCredentialRequest,
-        googleIdOnlyCredentialRequest,
-        googleSignInOnlyCredentialRequest,
-        isGoogleSignInConfigured,
-        activityContext
-    ) {
-        {
-            googleSignInError = null
-            if (!isGoogleSignInConfigured) {
-                googleSignInError = context.getString(
-                    R.string.settings_account_sign_in_configuration_error
-                )
-            } else if (activityContext == null) {
-                googleSignInError = context.getString(
-                    R.string.settings_account_sign_in_configuration_error
-                )
-            } else {
-                scope.launch {
-                    try {
-                        val googleCredentialRequests = listOfNotNull(
-                            googleCombinedCredentialRequest,
-                            googleIdOnlyCredentialRequest,
-                            googleSignInOnlyCredentialRequest
-                        )
-                        if (googleCredentialRequests.isEmpty()) {
-                            googleSignInError = context.getString(
-                                R.string.settings_account_sign_in_error
-                            )
-                            return@launch
-                        }
-                        val googleCredential = requestGoogleIdTokenCredential(
-                            credentialManager,
-                            activityContext,
-                            googleCredentialRequests
-                        )
-                        if (googleCredential == null) {
-                            googleSignInError = context.getString(
-                                R.string.settings_account_sign_in_error
-                            )
-                            return@launch
-                        }
-
-                        val accountId = googleCredential.id
-                        if (accountId.isBlank()) {
-                            googleSignInError = context.getString(
-                                R.string.settings_account_sign_in_missing_id_error
-                            )
-                            return@launch
-                        }
-
-                        val emailAddress = parseEmailFromIdToken(googleCredential.idToken)
-                        userPreferencesRepository.updateGoogleAccount(
-                            id = accountId,
-                            email = emailAddress,
-                            name = googleCredential.displayName
-                        )
-                    } catch (exception: GetCredentialCancellationException) {
-                        googleSignInError = null
-                    } catch (exception: GetCredentialException) {
-                        googleSignInError = context.getString(
-                            R.string.settings_account_sign_in_error
-                        )
-                    } catch (exception: Exception) {
-                        googleSignInError = context.getString(
-                            R.string.settings_account_sign_in_error
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    val handleGoogleSignOut: () -> Unit = remember(credentialManager) {
-        {
-            googleSignInError = null
-            scope.launch {
-                val signOutResult = runCatching {
-                    credentialManager.clearCredentialState(ClearCredentialStateRequest())
-                }
-                if (signOutResult.isFailure) {
-                    googleSignInError = context.getString(R.string.settings_account_sign_out_error)
-                }
-                userPreferencesRepository.clearGoogleAccount()
-            }
-        }
+    val inviteCode = remember(dueDateEpochDay) {
+        dueDateEpochDay?.let(PartnerInviteCode::generate)
     }
 
     var partnerCodeError by remember { mutableStateOf<String?>(null) }
@@ -626,12 +399,6 @@ fun BabyDevelopmentTrackerScreen(
                             }
                             Unit
                         },
-                        isGoogleAccountLinked = isGoogleAccountLinked,
-                        googleAccountName = googleAccountName,
-                        googleAccountEmail = googleAccountEmail,
-                        isGoogleSignInConfigured = isGoogleSignInConfigured,
-                        onGoogleSignIn = handleGoogleSignIn,
-                        onGoogleSignOut = handleGoogleSignOut,
                         inviteCode = inviteCode,
                         partnerLinkApproved = partnerLinkApproved,
                         onPartnerLinkApprovedChange = { approved ->
@@ -644,8 +411,7 @@ fun BabyDevelopmentTrackerScreen(
                         onPartnerCodeInputChanged = clearPartnerCodeStatus,
                         partnerCodeError = partnerCodeError,
                         partnerCodeSuccessMessage = partnerCodeSuccess,
-                        dueDateFromPartnerInvite = dueDateFromPartnerInvite,
-                        googleSignInError = googleSignInError
+                        dueDateFromPartnerInvite = dueDateFromPartnerInvite
                     )
                 }
             }
@@ -929,12 +695,6 @@ private fun SettingsContent(
     onFamilyRoleSelected: (FamilyRole) -> Unit,
     themePreference: ThemePreference,
     onThemePreferenceSelected: (ThemePreference) -> Unit,
-    isGoogleAccountLinked: Boolean,
-    googleAccountName: String?,
-    googleAccountEmail: String?,
-    isGoogleSignInConfigured: Boolean,
-    onGoogleSignIn: () -> Unit,
-    onGoogleSignOut: () -> Unit,
     inviteCode: String?,
     partnerLinkApproved: Boolean,
     onPartnerLinkApprovedChange: (Boolean) -> Unit,
@@ -943,7 +703,6 @@ private fun SettingsContent(
     partnerCodeError: String?,
     partnerCodeSuccessMessage: String?,
     dueDateFromPartnerInvite: Boolean,
-    googleSignInError: String?,
 ) {
     val clipboardManager = LocalClipboardManager.current
     val isPartnerRole = familyRole == FamilyRole.PARTNER_SUPPORTER
@@ -984,81 +743,6 @@ private fun SettingsContent(
             )
         }
 
-        Column {
-            Text(
-                text = stringResource(id = R.string.settings_account_title),
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                text = stringResource(id = R.string.settings_account_description),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            if (isGoogleAccountLinked) {
-                val displayName = googleAccountName?.takeIf { it.isNotBlank() }
-                val emailAddress = googleAccountEmail?.takeIf { it.isNotBlank() }
-                Text(
-                    text = when {
-                        displayName != null && emailAddress != null -> stringResource(
-                            id = R.string.settings_account_signed_in_name_email,
-                            displayName,
-                            emailAddress
-                        )
-                        emailAddress != null -> stringResource(
-                            id = R.string.settings_account_signed_in_email,
-                            emailAddress
-                        )
-                        displayName != null -> stringResource(
-                            id = R.string.settings_account_signed_in_name,
-                            displayName
-                        )
-                        else -> stringResource(id = R.string.settings_account_signed_in_generic)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-                Button(
-                    onClick = onGoogleSignOut,
-                    modifier = Modifier
-                        .padding(top = 16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Text(text = stringResource(id = R.string.settings_account_sign_out_button))
-                }
-            } else {
-                Text(
-                    text = stringResource(id = R.string.settings_account_signed_out),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-                Button(
-                    onClick = onGoogleSignIn,
-                    enabled = isGoogleSignInConfigured,
-                    modifier = Modifier
-                        .padding(top = 16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Text(text = stringResource(id = R.string.settings_account_sign_in_button))
-                }
-                if (!isGoogleSignInConfigured) {
-                    Text(
-                        text = stringResource(id = R.string.settings_account_sign_in_configuration_error),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-            }
-            googleSignInError?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-        }
-
         if (!isPartnerRole) {
             Column {
                 Text(
@@ -1071,14 +755,6 @@ private fun SettingsContent(
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 when {
-                    !isGoogleAccountLinked -> {
-                        Text(
-                            text = stringResource(id = R.string.settings_partner_invite_requirements_link),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 12.dp)
-                        )
-                    }
                     inviteCode == null -> {
                         Text(
                             text = stringResource(id = R.string.settings_partner_invite_requirements_due_date),
@@ -1155,20 +831,11 @@ private fun SettingsContent(
                     Switch(
                         checked = partnerLinkApproved,
                         onCheckedChange = onPartnerLinkApprovedChange,
-                        enabled = isGoogleAccountLinked,
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
                             checkedThumbColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         modifier = Modifier.align(Alignment.CenterEnd)
-                    )
-                }
-                if (!isGoogleAccountLinked) {
-                    Text(
-                        text = stringResource(id = R.string.settings_partner_connection_toggle_disabled),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
             }

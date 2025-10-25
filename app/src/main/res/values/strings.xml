@@ -60,29 +60,14 @@
     <string name="family_role_expectant_parent_description">I’m carrying the baby and want updates tailored to my experience.</string>
     <string name="family_role_partner_supporter">Partner or supporter</string>
     <string name="family_role_partner_supporter_description">I’m supporting the pregnant parent and want to stay in sync.</string>
-    <string name="settings_account_title">Account &amp; linking</string>
-    <string name="settings_account_description">Link your Google account so you can securely share pregnancy progress.</string>
-    <string name="settings_account_signed_in_name_email">Signed in as %1$s (%2$s)</string>
-    <string name="settings_account_signed_in_email">Signed in as %1$s</string>
-    <string name="settings_account_signed_in_name">Signed in as %1$s</string>
-    <string name="settings_account_signed_in_generic">Signed in with Google</string>
-    <string name="settings_account_sign_out_button">Sign out of Google</string>
-    <string name="settings_account_signed_out">You’re not linked yet. Sign in to connect with your partner.</string>
-    <string name="settings_account_sign_in_button">Sign in with Google</string>
-    <string name="settings_account_sign_in_error">We couldn’t complete Google sign-in. Try again.</string>
-    <string name="settings_account_sign_in_configuration_error">Google sign-in isn’t configured yet. Add your web client ID and try again.</string>
-    <string name="settings_account_sign_in_missing_id_error">We couldn’t confirm your Google account. Try again.</string>
-    <string name="settings_account_sign_out_error">Sign out didn’t finish. Check your connection and retry.</string>
     <string name="settings_partner_invite_title">Partner invite code</string>
     <string name="settings_partner_invite_description">Share a one-time code so your partner can sync to your pregnancy timeline.</string>
-    <string name="settings_partner_invite_requirements_link">Link your Google account to generate an invite code.</string>
     <string name="settings_partner_invite_requirements_due_date">Set your due date to generate an invite code.</string>
     <string name="settings_partner_invite_code_label">Your code: %1$s</string>
     <string name="settings_partner_invite_copy">Copy invite code</string>
     <string name="settings_partner_invite_copy_confirmation">Invite code copied.</string>
     <string name="settings_partner_connection_toggle_title">Allow partner connection</string>
     <string name="settings_partner_connection_toggle_description">Let your partner sync future features we release for shared planning.</string>
-    <string name="settings_partner_connection_toggle_disabled">Turn on Google linking to control partner access.</string>
     <string name="settings_partner_code_title">Add your invite code</string>
     <string name="settings_partner_code_description">Enter the code your partner shared to match their due date.</string>
     <string name="settings_partner_code_placeholder">Enter code (e.g. BUN1-A2BC)</string>
@@ -113,5 +98,4 @@
     <string name="onboarding_partner_code_description">Ask the expectant parent for their invite code so we can match their due date.</string>
     <string name="onboarding_partner_code_placeholder">Type the invite code</string>
     <string name="onboarding_partner_code_error">We couldn’t verify that code. Check it and try again.</string>
-    <string name="google_sign_in_server_client_id" translatable="false">633549776297-j7uskpsa9vg2555dsl768ghsdg48fi8n.apps.googleusercontent.com</string>
 </resources>

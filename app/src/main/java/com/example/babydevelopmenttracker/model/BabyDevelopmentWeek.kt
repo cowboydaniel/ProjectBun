@@ -8,6 +8,13 @@ data class BabyDevelopmentWeek(
 )
 
 object BabyDevelopmentRepository {
+    internal const val DEFAULT_BABY_HIGHLIGHTS =
+        "Baby is growing steadily with foundational organs developing."
+    internal const val DEFAULT_PARENT_CHANGES =
+        "Your body is adapting to pregnancy with hormonal shifts."
+    internal const val DEFAULT_TIPS =
+        "Continue prenatal care, balanced meals, and consistent rest."
+
     val weeks: List<BabyDevelopmentWeek> = listOf(
         BabyDevelopmentWeek(
             week = 4,
@@ -248,9 +255,9 @@ object BabyDevelopmentRepository {
             (4..42).map { week ->
                 map[week] ?: BabyDevelopmentWeek(
                     week = week,
-                    babyHighlights = "Baby is growing steadily with foundational organs developing.",
-                    parentChanges = "Your body is adapting to pregnancy with hormonal shifts.",
-                    tips = "Continue prenatal care, balanced meals, and consistent rest."
+                    babyHighlights = DEFAULT_BABY_HIGHLIGHTS,
+                    parentChanges = DEFAULT_PARENT_CHANGES,
+                    tips = DEFAULT_TIPS
                 )
             }
         }

@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">Baby Development Tracker</string>
+    <string name="navigation_home">Home</string>
+    <string name="navigation_settings">Settings</string>
+    <string name="drawer_menu_content_description">Open navigation menu</string>
     <string name="week_selector_label">Week %1$d</string>
     <string name="development_heading">Current Highlights</string>
     <string name="symptoms_heading">Parent Experience</string>
@@ -13,6 +16,10 @@
     <string name="reminder_toggle_title">Weekly reminders</string>
     <string name="reminder_toggle_description">Get a gentle nudge to review the latest pregnancy insights each week.</string>
     <string name="notifications_permission_rationale">Turn on notifications in system settings to receive weekly check-ins.</string>
+    <string name="home_settings_hint">Manage your due date and reminders from Settings.</string>
+    <string name="settings_due_date_title">Due date</string>
+    <string name="settings_due_date_description">Set your due date to personalize weekly highlights.</string>
+    <string name="settings_notifications_title">Notifications</string>
     <string name="notification_channel_name">Weekly check-ins</string>
     <string name="notification_channel_description">Reminders to open the app and view your current pregnancy week.</string>
     <string name="notification_title">Week %1$d check-in is ready</string>

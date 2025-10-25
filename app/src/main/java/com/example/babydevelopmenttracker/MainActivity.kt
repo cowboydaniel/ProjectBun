@@ -8,8 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,13 +19,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -36,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,25 +59,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
 import com.example.babydevelopmenttracker.data.ReminderPreferences
 import com.example.babydevelopmenttracker.data.ReminderPreferencesRepository
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
-import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
-import com.example.babydevelopmenttracker.model.findWeek
 import com.example.babydevelopmenttracker.model.FetalGrowthPoint
 import com.example.babydevelopmenttracker.model.FetalGrowthTrends
+import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
+import com.example.babydevelopmenttracker.model.findWeek
 import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import java.time.Instant
@@ -89,6 +102,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private enum class DrawerDestination { Home, Settings }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,7 +139,8 @@ fun BabyDevelopmentTrackerScreen() {
         }
     }
 
-    val weekInfo = BabyDevelopmentRepository.findWeek(selectedWeek)
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    var currentDestination by remember { mutableStateOf(DrawerDestination.Home) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -139,91 +155,79 @@ fun BabyDevelopmentTrackerScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
                 Text(
                     text = stringResource(id = R.string.app_name),
-                    style = MaterialTheme.typography.titleLarge
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
                 )
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                titleContentColor = MaterialTheme.colorScheme.onPrimary
-            )
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Button(
-                onClick = { showDatePicker = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = stringResource(id = R.string.select_due_date))
-            }
-
-            Text(
-                text = dueDate?.let { date ->
-                    stringResource(
-                        id = R.string.selected_due_date_label,
-                        date.format(dateFormatter)
-                    )
-                } ?: stringResource(id = R.string.due_date_prompt),
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-
-            calculatedWeek?.let { week ->
-                Text(
-                    text = stringResource(id = R.string.estimated_week_label, week),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 4.dp)
+                NavigationDrawerItem(
+                    label = { Text(text = stringResource(id = R.string.navigation_home)) },
+                    selected = currentDestination == DrawerDestination.Home,
+                    onClick = {
+                        currentDestination = DrawerDestination.Home
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                NavigationDrawerItem(
+                    label = { Text(text = stringResource(id = R.string.navigation_settings)) },
+                    selected = currentDestination == DrawerDestination.Settings,
+                    onClick = {
+                        currentDestination = DrawerDestination.Settings
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = stringResource(id = R.string.week_selector_label, selectedWeek),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center
-            )
-            Slider(
-                value = selectedWeek.toFloat(),
-                onValueChange = { selectedWeek = it.roundToInt().coerceIn(4, 42) },
-                valueRange = 4f..42f,
-                steps = 42 - 4 - 1,
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary
-                ),
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 24.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(id = R.string.reminder_toggle_title),
-                        style = MaterialTheme.typography.titleMedium
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = stringResource(id = R.string.app_name),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(
+                            onClick = { scope.launch { drawerState.open() } }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Menu,
+                                contentDescription = stringResource(id = R.string.drawer_menu_content_description)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                     )
-                    Text(
-                        text = stringResource(id = R.string.reminder_toggle_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                Switch(
-                    checked = remindersEnabled,
-                    onCheckedChange = { isChecked ->
+                )
+            }
+        ) { innerPadding ->
+            when (currentDestination) {
+                DrawerDestination.Home -> HomeContent(
+                    modifier = Modifier.padding(innerPadding),
+                    selectedWeek = selectedWeek,
+                    onWeekChange = { selectedWeek = it },
+                    dueDate = dueDate,
+                    dateFormatter = dateFormatter,
+                    calculatedWeek = calculatedWeek
+                )
+                DrawerDestination.Settings -> SettingsContent(
+                    modifier = Modifier.padding(innerPadding),
+                    dueDate = dueDate,
+                    dateFormatter = dateFormatter,
+                    calculatedWeek = calculatedWeek,
+                    remindersEnabled = remindersEnabled,
+                    onReminderToggle = { isChecked ->
                         if (isChecked) {
                             val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                                 ContextCompat.checkSelfPermission(
@@ -248,103 +252,14 @@ fun BabyDevelopmentTrackerScreen() {
                             }
                         }
                     },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary
-                    )
+                    showPermissionRationale = showPermissionRationale,
+                    onSelectDueDate = { showDatePicker = true }
                 )
-            }
-
-            if (showPermissionRationale) {
-                Text(
-                    text = stringResource(id = R.string.notifications_permission_rationale),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Start,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                )
-            }
-        }
-
-        weekInfo?.let { info ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    GrowthTrendCard(selectedWeek = selectedWeek)
-                }
-                item {
-                    HighlightCard(
-                        title = stringResource(id = R.string.development_heading),
-                        highlights = info.babyHighlights
-                    )
-                }
-                item {
-                    HighlightCard(
-                        title = stringResource(id = R.string.symptoms_heading),
-                        highlights = info.parentChanges
-                    )
-                }
-                item {
-                    HighlightCard(
-                        title = stringResource(id = R.string.tips_heading),
-                        highlights = info.tips
-                    )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                if (selectedWeek > 4) {
-                    val previousWeek = selectedWeek - 1
-                    val previousInfo = BabyDevelopmentRepository.findWeek(previousWeek)
-                    if (previousInfo != null) {
-                        item {
-                            Text(
-                                text = "Previously (Week $previousWeek)",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                            )
-                        }
-                        item {
-                            HighlightCard(
-                                title = stringResource(id = R.string.development_heading),
-                                highlights = previousInfo.babyHighlights
-                            )
-                        }
-                    }
-                }
-
-                if (selectedWeek < 42) {
-                    val nextWeek = selectedWeek + 1
-                    val nextInfo = BabyDevelopmentRepository.findWeek(nextWeek)
-                    if (nextInfo != null) {
-                        item {
-                            Text(
-                                text = "Up Next (Week $nextWeek)",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-                            )
-                        }
-                        item {
-                            HighlightCard(
-                                title = stringResource(id = R.string.development_heading),
-                                highlights = nextInfo.babyHighlights
-                            )
-                        }
-                    }
-                }
             }
         }
     }
 
-    if (showDatePicker) {
+    if (currentDestination == DrawerDestination.Settings && showDatePicker) {
         val defaultDueDate = remember { today.plusWeeks(20) }
         val initialDate = dueDate ?: defaultDueDate
         val datePickerState = rememberDatePickerState(
@@ -385,6 +300,240 @@ fun BabyDevelopmentTrackerScreen() {
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+}
+
+@Composable
+private fun HomeContent(
+    modifier: Modifier = Modifier,
+    selectedWeek: Int,
+    onWeekChange: (Int) -> Unit,
+    dueDate: LocalDate?,
+    dateFormatter: DateTimeFormatter,
+    calculatedWeek: Int?
+) {
+    val weekInfo = remember(selectedWeek) { BabyDevelopmentRepository.findWeek(selectedWeek) }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = dueDate?.let { date ->
+                        stringResource(
+                            id = R.string.selected_due_date_label,
+                            date.format(dateFormatter)
+                        )
+                    } ?: stringResource(id = R.string.due_date_prompt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = stringResource(id = R.string.home_settings_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                calculatedWeek?.let { week ->
+                    Text(
+                        text = stringResource(id = R.string.estimated_week_label, week),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(id = R.string.week_selector_label, selectedWeek),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                Slider(
+                    value = selectedWeek.toFloat(),
+                    onValueChange = { onWeekChange(it.roundToInt().coerceIn(4, 42)) },
+                    valueRange = 4f..42f,
+                    steps = 42 - 4 - 1,
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        weekInfo?.let { info ->
+            item {
+                GrowthTrendCard(selectedWeek = selectedWeek)
+            }
+            item {
+                HighlightCard(
+                    title = stringResource(id = R.string.development_heading),
+                    highlights = info.babyHighlights
+                )
+            }
+            item {
+                HighlightCard(
+                    title = stringResource(id = R.string.symptoms_heading),
+                    highlights = info.parentChanges
+                )
+            }
+            item {
+                HighlightCard(
+                    title = stringResource(id = R.string.tips_heading),
+                    highlights = info.tips
+                )
+            }
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            if (selectedWeek > 4) {
+                val previousWeek = selectedWeek - 1
+                val previousInfo = BabyDevelopmentRepository.findWeek(previousWeek)
+                if (previousInfo != null) {
+                    item {
+                        Text(
+                            text = "Previously (Week $previousWeek)",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+                    item {
+                        HighlightCard(
+                            title = stringResource(id = R.string.development_heading),
+                            highlights = previousInfo.babyHighlights
+                        )
+                    }
+                }
+            }
+
+            if (selectedWeek < 42) {
+                val nextWeek = selectedWeek + 1
+                val nextInfo = BabyDevelopmentRepository.findWeek(nextWeek)
+                if (nextInfo != null) {
+                    item {
+                        Text(
+                            text = "Up Next (Week $nextWeek)",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                        )
+                    }
+                    item {
+                        HighlightCard(
+                            title = stringResource(id = R.string.development_heading),
+                            highlights = nextInfo.babyHighlights
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsContent(
+    modifier: Modifier = Modifier,
+    dueDate: LocalDate?,
+    dateFormatter: DateTimeFormatter,
+    calculatedWeek: Int?,
+    remindersEnabled: Boolean,
+    onReminderToggle: (Boolean) -> Unit,
+    showPermissionRationale: Boolean,
+    onSelectDueDate: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        Column {
+            Text(
+                text = stringResource(id = R.string.settings_due_date_title),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = stringResource(id = R.string.settings_due_date_description),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Button(
+                onClick = onSelectDueDate,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+            ) {
+                Text(text = stringResource(id = R.string.select_due_date))
+            }
+            Text(
+                text = dueDate?.let { date ->
+                    stringResource(
+                        id = R.string.selected_due_date_label,
+                        date.format(dateFormatter)
+                    )
+                } ?: stringResource(id = R.string.due_date_prompt),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            calculatedWeek?.let { week ->
+                Text(
+                    text = stringResource(id = R.string.estimated_week_label, week),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+
+        Column {
+            Text(
+                text = stringResource(id = R.string.settings_notifications_title),
+                style = MaterialTheme.typography.titleLarge
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.reminder_toggle_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = stringResource(id = R.string.reminder_toggle_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                Switch(
+                    checked = remindersEnabled,
+                    onCheckedChange = onReminderToggle,
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+            }
+            if (showPermissionRationale) {
+                Text(
+                    text = stringResource(id = R.string.notifications_permission_rationale),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
     }
 }

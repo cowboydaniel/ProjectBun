@@ -1,6 +1,7 @@
 package com.example.babydevelopmenttracker
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -29,12 +30,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DrawerValue
@@ -46,6 +48,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -66,6 +69,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,14 +80,19 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.babydevelopmenttracker.data.FamilyRole
+import com.example.babydevelopmenttracker.data.PartnerInviteCode
 import com.example.babydevelopmenttracker.data.UserPreferences
 import com.example.babydevelopmenttracker.data.UserPreferencesRepository
 import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
@@ -95,6 +104,9 @@ import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
 import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import com.example.babydevelopmenttracker.ui.theme.themePreviewColors
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -157,10 +169,107 @@ fun BabyDevelopmentTrackerScreen(
     val familyRole = userPreferences.familyRole
     val onboardingCompleted = userPreferences.onboardingCompleted
     val themePreference = userPreferences.themePreference
+    val googleAccountName = userPreferences.googleAccountName
+    val googleAccountEmail = userPreferences.googleAccountEmail
+    val googleAccountId = userPreferences.googleAccountId
+    val isGoogleAccountLinked = !googleAccountId.isNullOrEmpty()
+    val dueDateFromPartnerInvite = userPreferences.dueDateFromPartnerInvite
+    val partnerLinkApproved = userPreferences.partnerLinkApproved
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
     var showDatePicker by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
+
+    val inviteCode = remember(dueDateEpochDay, isGoogleAccountLinked) {
+        if (isGoogleAccountLinked && dueDateEpochDay != null) {
+            PartnerInviteCode.generate(dueDateEpochDay)
+        } else {
+            null
+        }
+    }
+
+    val googleSignInOptions = remember {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .build()
+    }
+    val googleSignInClient = remember(googleSignInOptions) {
+        GoogleSignIn.getClient(context, googleSignInOptions)
+    }
+    var googleSignInError by remember { mutableStateOf<String?>(null) }
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_CANCELED) {
+            googleSignInError = null
+            return@rememberLauncherForActivityResult
+        }
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            googleSignInError = null
+            scope.launch {
+                userPreferencesRepository.updateGoogleAccount(
+                    account.id,
+                    account.email,
+                    account.displayName
+                )
+            }
+        } catch (exception: ApiException) {
+            googleSignInError = context.getString(R.string.settings_account_sign_in_error)
+        }
+    }
+
+    val handleGoogleSignIn = remember(googleSignInClient) {
+        {
+            googleSignInError = null
+            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+        }
+    }
+    val handleGoogleSignOut = remember(googleSignInClient) {
+        {
+            googleSignInError = null
+            googleSignInClient.signOut()
+                .addOnCompleteListener {
+                    scope.launch {
+                        userPreferencesRepository.clearGoogleAccount()
+                    }
+                }
+                .addOnFailureListener {
+                    googleSignInError = context.getString(R.string.settings_account_sign_out_error)
+                }
+        }
+    }
+
+    var partnerCodeError by remember { mutableStateOf<String?>(null) }
+    var partnerCodeSuccess by remember { mutableStateOf<String?>(null) }
+    val clearPartnerCodeStatus = remember {
+        {
+            partnerCodeError = null
+            partnerCodeSuccess = null
+        }
+    }
+    val handlePartnerCodeSubmit = remember(remindersEnabled) {
+        { code: String ->
+            clearPartnerCodeStatus()
+            val epochDay = PartnerInviteCode.parse(code)
+            if (epochDay != null) {
+                val targetDate = LocalDate.ofEpochDay(epochDay)
+                partnerCodeSuccess = context.getString(
+                    R.string.settings_partner_code_success,
+                    targetDate.format(dateFormatter)
+                )
+                scope.launch {
+                    userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite = true)
+                    if (remindersEnabled) {
+                        reminderScheduler.scheduleWeeklyReminder(epochDay)
+                    }
+                }
+            } else {
+                partnerCodeError = context.getString(R.string.settings_partner_code_error)
+            }
+        }
+    }
 
     val calculatedWeek = dueDate?.let { calculateWeekFromDueDate(it, today) }
 
@@ -173,6 +282,13 @@ fun BabyDevelopmentTrackerScreen(
             reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
         } else {
             reminderScheduler.cancelWeeklyReminder()
+        }
+    }
+
+    LaunchedEffect(familyRole) {
+        if (familyRole != FamilyRole.PARTNER_SUPPORTER) {
+            partnerCodeError = null
+            partnerCodeSuccess = null
         }
     }
 
@@ -230,10 +346,10 @@ fun BabyDevelopmentTrackerScreen(
                 showPermissionRationale = false
                 scope.launch { userPreferencesRepository.updateFamilyRole(role) }
             },
-            onConfirmDueDate = { date ->
+            onConfirmDueDate = { date, fromPartnerInvite ->
                 scope.launch {
                     val epochDay = date.toEpochDay()
-                    userPreferencesRepository.updateDueDate(epochDay)
+                    userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite)
                     if (remindersEnabled) {
                         reminderScheduler.scheduleWeeklyReminder(epochDay)
                     }
@@ -332,7 +448,25 @@ fun BabyDevelopmentTrackerScreen(
                             scope.launch {
                                 userPreferencesRepository.updateThemePreference(preference)
                             }
-                        }
+                        },
+                        isGoogleAccountLinked = isGoogleAccountLinked,
+                        googleAccountName = googleAccountName,
+                        googleAccountEmail = googleAccountEmail,
+                        onGoogleSignIn = handleGoogleSignIn,
+                        onGoogleSignOut = handleGoogleSignOut,
+                        inviteCode = inviteCode,
+                        partnerLinkApproved = partnerLinkApproved,
+                        onPartnerLinkApprovedChange = { approved ->
+                            scope.launch {
+                                userPreferencesRepository.updatePartnerLinkApproved(approved)
+                            }
+                        },
+                        onPartnerCodeSubmit = handlePartnerCodeSubmit,
+                        onPartnerCodeInputChanged = clearPartnerCodeStatus,
+                        partnerCodeError = partnerCodeError,
+                        partnerCodeSuccessMessage = partnerCodeSuccess,
+                        dueDateFromPartnerInvite = dueDateFromPartnerInvite,
+                        googleSignInError = googleSignInError
                     )
                 }
             }
@@ -613,7 +747,36 @@ private fun SettingsContent(
     onFamilyRoleSelected: (FamilyRole) -> Unit,
     themePreference: ThemePreference,
     onThemePreferenceSelected: (ThemePreference) -> Unit,
+    isGoogleAccountLinked: Boolean,
+    googleAccountName: String?,
+    googleAccountEmail: String?,
+    onGoogleSignIn: () -> Unit,
+    onGoogleSignOut: () -> Unit,
+    inviteCode: String?,
+    partnerLinkApproved: Boolean,
+    onPartnerLinkApprovedChange: (Boolean) -> Unit,
+    onPartnerCodeSubmit: (String) -> Unit,
+    onPartnerCodeInputChanged: () -> Unit,
+    partnerCodeError: String?,
+    partnerCodeSuccessMessage: String?,
+    dueDateFromPartnerInvite: Boolean,
+    googleSignInError: String?,
 ) {
+    val clipboardManager = LocalClipboardManager.current
+    val isPartnerRole = familyRole == FamilyRole.PARTNER_SUPPORTER
+    var partnerCodeInput by rememberSaveable { mutableStateOf("") }
+    var inviteCopied by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(partnerCodeSuccessMessage) {
+        if (partnerCodeSuccessMessage != null) {
+            partnerCodeInput = ""
+        }
+    }
+
+    LaunchedEffect(inviteCode) {
+        inviteCopied = false
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -640,33 +803,298 @@ private fun SettingsContent(
 
         Column {
             Text(
-                text = stringResource(id = R.string.settings_due_date_title),
+                text = stringResource(id = R.string.settings_account_title),
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = stringResource(id = R.string.settings_due_date_description),
+                text = stringResource(id = R.string.settings_account_description),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 8.dp)
             )
-            Button(
-                onClick = onSelectDueDate,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp)
-            ) {
-                Text(text = stringResource(id = R.string.select_due_date))
+            if (isGoogleAccountLinked) {
+                val displayName = googleAccountName?.takeIf { it.isNotBlank() }
+                val emailAddress = googleAccountEmail?.takeIf { it.isNotBlank() }
+                Text(
+                    text = when {
+                        displayName != null && emailAddress != null -> stringResource(
+                            id = R.string.settings_account_signed_in_name_email,
+                            displayName,
+                            emailAddress
+                        )
+                        emailAddress != null -> stringResource(
+                            id = R.string.settings_account_signed_in_email,
+                            emailAddress
+                        )
+                        displayName != null -> stringResource(
+                            id = R.string.settings_account_signed_in_name,
+                            displayName
+                        )
+                        else -> stringResource(id = R.string.settings_account_signed_in_generic)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+                Button(
+                    onClick = onGoogleSignOut,
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text(text = stringResource(id = R.string.settings_account_sign_out_button))
+                }
+            } else {
+                Text(
+                    text = stringResource(id = R.string.settings_account_signed_out),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+                Button(
+                    onClick = onGoogleSignIn,
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text(text = stringResource(id = R.string.settings_account_sign_in_button))
+                }
             }
-            Text(
-                text = dueDate?.let { date ->
-                    stringResource(
-                        id = R.string.selected_due_date_label,
-                        date.format(dateFormatter)
+            googleSignInError?.let { error ->
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+
+        if (!isPartnerRole) {
+            Column {
+                Text(
+                    text = stringResource(id = R.string.settings_partner_invite_title),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Text(
+                    text = stringResource(id = R.string.settings_partner_invite_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                when {
+                    !isGoogleAccountLinked -> {
+                        Text(
+                            text = stringResource(id = R.string.settings_partner_invite_requirements_link),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                    inviteCode == null -> {
+                        Text(
+                            text = stringResource(id = R.string.settings_partner_invite_requirements_due_date),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                    else -> {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp),
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        id = R.string.settings_partner_invite_code_label,
+                                        inviteCode
+                                    ),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                IconButton(onClick = {
+                                    clipboardManager.setText(AnnotatedString(inviteCode))
+                                    inviteCopied = true
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ContentCopy,
+                                        contentDescription = stringResource(id = R.string.settings_partner_invite_copy)
+                                    )
+                                }
+                            }
+                        }
+                        if (inviteCopied) {
+                            Text(
+                                text = stringResource(id = R.string.settings_partner_invite_copy_confirmation),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(end = 72.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.settings_partner_connection_toggle_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = stringResource(id = R.string.settings_partner_connection_toggle_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    Switch(
+                        checked = partnerLinkApproved,
+                        onCheckedChange = onPartnerLinkApprovedChange,
+                        enabled = isGoogleAccountLinked,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.align(Alignment.CenterEnd)
                     )
-                } ?: stringResource(id = R.string.due_date_prompt),
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.padding(top = 12.dp)
+                }
+                if (!isGoogleAccountLinked) {
+                    Text(
+                        text = stringResource(id = R.string.settings_partner_connection_toggle_disabled),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        } else {
+            Column {
+                Text(
+                    text = stringResource(id = R.string.settings_partner_code_title),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Text(
+                    text = stringResource(id = R.string.settings_partner_code_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                OutlinedTextField(
+                    value = partnerCodeInput,
+                    onValueChange = { value ->
+                        partnerCodeInput = value.uppercase()
+                        inviteCopied = false
+                        onPartnerCodeInputChanged()
+                    },
+                    placeholder = {
+                        Text(text = stringResource(id = R.string.settings_partner_code_placeholder))
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                )
+                Button(
+                    onClick = {
+                        onPartnerCodeSubmit(partnerCodeInput)
+                    },
+                    enabled = partnerCodeInput.isNotBlank(),
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text(text = stringResource(id = R.string.settings_partner_code_apply))
+                }
+                partnerCodeError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                partnerCodeSuccessMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+
+        Column {
+            Text(
+                text = stringResource(id = R.string.settings_due_date_title),
+                style = MaterialTheme.typography.titleLarge
             )
+            if (isPartnerRole) {
+                Text(
+                    text = stringResource(id = R.string.settings_due_date_description_partner),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Text(
+                    text = dueDate?.let { date ->
+                        stringResource(
+                            id = R.string.selected_due_date_label,
+                            date.format(dateFormatter)
+                        )
+                    } ?: stringResource(id = R.string.settings_partner_code_prompt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+                if (dueDateFromPartnerInvite) {
+                    Text(
+                        text = stringResource(id = R.string.settings_due_date_invite_managed),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            } else {
+                Text(
+                    text = stringResource(id = R.string.settings_due_date_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Button(
+                    onClick = {
+                        inviteCopied = false
+                        onSelectDueDate()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                ) {
+                    Text(text = stringResource(id = R.string.select_due_date))
+                }
+                Text(
+                    text = dueDate?.let { date ->
+                        stringResource(
+                            id = R.string.selected_due_date_label,
+                            date.format(dateFormatter)
+                        )
+                    } ?: stringResource(id = R.string.due_date_prompt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
             calculatedWeek?.let { week ->
                 Text(
                     text = stringResource(id = R.string.estimated_week_label, week),
@@ -907,7 +1335,7 @@ private fun OnboardingFlow(
     today: LocalDate,
     remindersEnabled: Boolean,
     onSelectFamilyRole: (FamilyRole) -> Unit,
-    onConfirmDueDate: (LocalDate) -> Unit,
+    onConfirmDueDate: (LocalDate, Boolean) -> Unit,
     onReminderToggle: (Boolean) -> Unit,
     onFinish: () -> Unit,
     showPermissionRationale: Boolean,
@@ -924,14 +1352,25 @@ private fun OnboardingFlow(
         datePickerState.selectedDateMillis = initialDueDateMillis
     }
     var selectedRole by remember(familyRole) { mutableStateOf(familyRole) }
+    var partnerCode by rememberSaveable { mutableStateOf("") }
+    var partnerCodeError by remember { mutableStateOf<String?>(null) }
 
     val selectedDate = datePickerState.selectedDateMillis?.let { millis ->
         Instant.ofEpochMilli(millis).atZone(zoneId).toLocalDate()
     }
 
+    val isPartnerRoleSelected = selectedRole == FamilyRole.PARTNER_SUPPORTER
+
+    LaunchedEffect(isPartnerRoleSelected) {
+        if (!isPartnerRoleSelected) {
+            partnerCode = ""
+            partnerCodeError = null
+        }
+    }
+
     val canProceed = when (step) {
         0 -> selectedRole != null
-        1 -> selectedDate != null
+        1 -> if (isPartnerRoleSelected) partnerCode.isNotBlank() else selectedDate != null
         else -> true
     }
 
@@ -974,17 +1413,51 @@ private fun OnboardingFlow(
                     )
                 }
                 1 -> {
-                    Text(
-                        text = stringResource(id = R.string.onboarding_due_date_title),
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
-                    )
-                    Text(
-                        text = stringResource(id = R.string.onboarding_due_date_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    DatePicker(state = datePickerState)
+                    if (isPartnerRoleSelected) {
+                        Text(
+                            text = stringResource(id = R.string.onboarding_partner_code_title),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = stringResource(id = R.string.onboarding_partner_code_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = partnerCode,
+                            onValueChange = { value ->
+                                partnerCode = value.uppercase()
+                                partnerCodeError = null
+                            },
+                            placeholder = {
+                                Text(text = stringResource(id = R.string.onboarding_partner_code_placeholder))
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        partnerCodeError?.let { error ->
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = stringResource(id = R.string.onboarding_due_date_title),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = stringResource(id = R.string.onboarding_due_date_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        DatePicker(state = datePickerState)
+                    }
                 }
                 2 -> {
                     Text(
@@ -1057,9 +1530,20 @@ private fun OnboardingFlow(
                         0 -> if (selectedRole != null) {
                             step += 1
                         }
-                        1 -> selectedDate?.let {
-                            onConfirmDueDate(it)
-                            step += 1
+                        1 -> if (isPartnerRoleSelected) {
+                            val epochDay = PartnerInviteCode.parse(partnerCode)
+                            if (epochDay != null) {
+                                partnerCodeError = null
+                                onConfirmDueDate(LocalDate.ofEpochDay(epochDay), true)
+                                step += 1
+                            } else {
+                                partnerCodeError = stringResource(id = R.string.onboarding_partner_code_error)
+                            }
+                        } else {
+                            selectedDate?.let {
+                                onConfirmDueDate(it, false)
+                                step += 1
+                            }
                         }
                         2 -> onFinish()
                     }

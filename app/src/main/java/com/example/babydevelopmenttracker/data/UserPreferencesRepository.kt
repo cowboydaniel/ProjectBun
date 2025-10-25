@@ -24,6 +24,7 @@ internal object UserPreferencesKeys {
     val THEME_PREFERENCE = stringPreferencesKey("theme_preference")
     val DUE_DATE_FROM_PARTNER = booleanPreferencesKey("due_date_from_partner")
     val PARTNER_LINK_APPROVED = booleanPreferencesKey("partner_link_approved")
+    val SHARE_JOURNAL_WITH_PARTNER = booleanPreferencesKey("share_journal_with_partner")
     val FAMILY_LINK_ID = stringPreferencesKey("family_link_id")
     val FAMILY_LINK_SECRET = stringPreferencesKey("family_link_secret")
     val DEVICE_AUTH_TOKEN = stringPreferencesKey("device_auth_token")
@@ -37,6 +38,7 @@ data class UserPreferences(
     val themePreference: ThemePreference = ThemePreference.Neutral,
     val dueDateFromPartnerInvite: Boolean = false,
     val partnerLinkApproved: Boolean = false,
+    val shareJournalWithPartner: Boolean = false,
     val familyLinkId: String? = null,
     val familyLinkSecret: String? = null,
     val deviceAuthToken: String? = null
@@ -57,6 +59,8 @@ class UserPreferencesRepository(private val context: Context) {
                 dueDateFromPartnerInvite =
                     preferences[UserPreferencesKeys.DUE_DATE_FROM_PARTNER] ?: false,
                 partnerLinkApproved = preferences[UserPreferencesKeys.PARTNER_LINK_APPROVED] ?: false,
+                shareJournalWithPartner =
+                    preferences[UserPreferencesKeys.SHARE_JOURNAL_WITH_PARTNER] ?: false,
                 familyLinkId = preferences[UserPreferencesKeys.FAMILY_LINK_ID],
                 familyLinkSecret = preferences[UserPreferencesKeys.FAMILY_LINK_SECRET],
                 deviceAuthToken = preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN]
@@ -106,6 +110,12 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updatePartnerLinkApproved(approved: Boolean) {
         context.userPreferencesDataStore.edit { preferences ->
             preferences[UserPreferencesKeys.PARTNER_LINK_APPROVED] = approved
+        }
+    }
+
+    suspend fun updateShareJournalWithPartner(share: Boolean) {
+        context.userPreferencesDataStore.edit { preferences ->
+            preferences[UserPreferencesKeys.SHARE_JOURNAL_WITH_PARTNER] = share
         }
     }
 

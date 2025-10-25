@@ -1,52 +1,52 @@
 # Project Roadmap
 
-## Vision
-Deliver an approachable Android companion for expectant parents that provides timely, trustworthy insights about fetal development and helpful guidance for each week of pregnancy.
+## Product North Star
+Empower new and expecting parents with a trustworthy, delightful Android companion that adapts to their journey and celebrates milestones together.
 
-## Milestones
+## Strategic Themes
+1. **Confidence through context:** Serve medically-reviewed guidance that responds to each family's unique timeline.
+2. **Delightful rituals:** Encourage regular check-ins that feel warm, celebratory, and easy to share with loved ones.
+3. **Inclusive access:** Ensure the experience feels welcoming across languages, abilities, and devices.
 
-### ✅ Phase 1 – Core Experience (MVP)
-- [x] Implement week-by-week content covering pregnancy weeks 4–42.
-- [x] Provide curated highlights for baby development, parent changes, and actionable tips per week.
-- [x] Support light and dark Material 3 theming with dynamic color on Android 12+.
-- [ ] Ensure app builds and runs on API level 24 and higher.
+## Milestone Waves
 
-### 🔄 Phase 2 – Engagement & Accessibility
-- Add bookmarking/favorites so users can mark specific weeks or tips for quick reference.
-- Introduce content search/filtering to surface symptoms or topics of interest.
-- Expand accessibility support (TalkBack labels, larger text presets, high-contrast palette).
-- Localize static strings and week content for at least one additional language.
+### Wave 1 – Guided Foundations
+- Create a guided onboarding flow that captures due date, family role, and notification preferences in under two minutes.
+- Build a "Today" dashboard that combines current week highlights, doctor checklist items, and partner suggestions.
+- Introduce a library of calming audio affirmations categorized by trimester and mood.
+- Ship offline-first caching for core weekly content with background refresh once connectivity returns.
 
-### 🧭 Phase 3 – Personalization & Insights
-- [x] Allow users to input due date and automatically surface the current pregnancy week.
-- [x] Provide optional reminders or push notifications for weekly check-ins.
-- [x] Integrate data visualization for trends (e.g., size comparisons, milestone timelines).
-- Offer evidence-backed resources from reputable organizations with outbound links.
+### Wave 2 – Support Network Amplification
+- Launch partner companion mode with synchronized reminders and custom tips for supporters.
+- Add lightweight journaling with mood tracking and exportable PDF summaries for prenatal visits.
+- Integrate with Google Calendar to surface upcoming appointments and recommended scheduling windows.
+- Pilot expert-led live sessions (Q&A, prenatal yoga) with RSVP and post-session recap modules.
 
-### 🌐 Phase 4 – Community & Support Ecosystem
-- Create opt-in sharing for users to export or share weekly summaries with partners.
-- Surface recommended reading lists, prenatal classes, or partner resources by week.
-- Explore anonymous Q&A or moderated community insights sourced from professionals.
+### Wave 3 – Personalized Insights & Growth
+- Generate adaptive growth insights that compare baby development to personalized baselines and flag talking points for providers.
+- Roll out community-sourced tips with moderation tooling and contributor reputation badges.
+- Enable AI-assisted question answering trained on vetted medical sources with transparent citations.
+- Provide proactive nudges for wellness goals (hydration, movement, mindfulness) informed by user-set targets.
 
-## Supporting Workstreams
-- **Content governance:** Establish review cadence with medical advisors for accuracy updates.
-- **Analytics & privacy:** Add anonymous analytics with clear consent flow and data retention policy.
-- **Quality assurance:** Automate regression tests for week data integrity and UI interactions.
-- **Release operations:** Define beta testing program and staged Play Store rollout strategy.
+## Platform Enablement Tracks
+- **Content operations:** Establish a structured review workflow with clinical reviewers and localization partners using a shared CMS.
+- **Observability:** Implement privacy-conscious analytics dashboards for key engagement funnels and feature adoption.
+- **Quality automation:** Expand instrumentation tests covering onboarding, dashboard widgets, and notifications across API 24–34.
+- **Release management:** Set up internal dogfooding channel, weekly bug triage rituals, and fast-follow hotfix playbooks.
 
-## Success Metrics
-- ≥80% week coverage viewed per active user during their first month.
-- ≥60% of users enabling weekly reminders within two weeks of onboarding.
-- App Store rating of 4.6+ with consistent feedback on clarity and usefulness.
-- Less than 1% crash-free users drop due to defects across app releases.
+## Success Signals
+- 70% of active users complete the guided onboarding flow within their first session.
+- Daily active users check the "Today" dashboard at least four times per week on average.
+- Partner companion mode reaches a 40% activation rate within one month of launch.
+- Less than 0.5% crash rate across the most recent three releases.
 
-## Risks & Mitigations
-- **Content accuracy drift:** Maintain editorial review board and time-boxed update cycles.
-- **User trust & privacy:** Communicate how data is used and allow granular notification control.
-- **Device fragmentation:** Continuously test on a range of API levels, screen sizes, and OEM skins.
-- **Scope creep:** Revisit roadmap quarterly to prioritize features aligned with mission impact.
+## Foresight & Risk Mitigation
+- **Information trust:** Maintain medical advisory council sign-off before shipping new educational content.
+- **Community health:** Invest in moderation, reporting, and escalation tooling before scaling social features.
+- **Data privacy:** Clearly document data handling practices, giving granular opt-outs for journaling, analytics, and integrations.
+- **Team bandwidth:** Re-baseline roadmap quarterly to ensure focus on highest-impact outcomes.
 
-## Next Steps
-- Validate Phase 2 priorities with user interviews and analytics from MVP usage.
-- Begin localization planning by auditing current copy assets and selecting translation partners.
-- Prototype due-date personalization flow and test with a closed beta cohort.
+## Immediate Next Moves
+- Conduct discovery interviews with partners/supporters to validate companion mode assumptions.
+- Prototype the "Today" dashboard widgets and run usability testing with five target users.
+- Define content modeling and CMS requirements to support localized, reviewable copy blocks.

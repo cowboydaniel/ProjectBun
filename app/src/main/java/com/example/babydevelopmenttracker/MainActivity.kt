@@ -106,19 +106,19 @@ fun BabyDevelopmentTrackerScreen() {
                 item {
                     HighlightCard(
                         title = stringResource(id = R.string.development_heading),
-                        body = info.babyHighlights
+                        highlights = info.babyHighlights
                     )
                 }
                 item {
                     HighlightCard(
                         title = stringResource(id = R.string.symptoms_heading),
-                        body = info.parentChanges
+                        highlights = info.parentChanges
                     )
                 }
                 item {
                     HighlightCard(
                         title = stringResource(id = R.string.tips_heading),
-                        body = info.tips
+                        highlights = info.tips
                     )
                 }
                 item {
@@ -139,7 +139,7 @@ fun BabyDevelopmentTrackerScreen() {
                         item {
                             HighlightCard(
                                 title = stringResource(id = R.string.development_heading),
-                                body = previousInfo.babyHighlights
+                                highlights = previousInfo.babyHighlights
                             )
                         }
                     }
@@ -159,7 +159,7 @@ fun BabyDevelopmentTrackerScreen() {
                         item {
                             HighlightCard(
                                 title = stringResource(id = R.string.development_heading),
-                                body = nextInfo.babyHighlights
+                                highlights = nextInfo.babyHighlights
                             )
                         }
                     }
@@ -170,7 +170,7 @@ fun BabyDevelopmentTrackerScreen() {
 }
 
 @Composable
-fun HighlightCard(title: String, body: String) {
+fun HighlightCard(title: String, highlights: List<String>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -185,10 +185,13 @@ fun HighlightCard(title: String, body: String) {
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            highlights.forEachIndexed { index, highlight ->
+                Text(
+                    text = "• $highlight",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = if (index == 0) Modifier else Modifier.padding(top = 6.dp)
+                )
+            }
         }
     }
 }

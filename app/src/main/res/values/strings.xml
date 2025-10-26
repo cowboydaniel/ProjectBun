@@ -96,6 +96,16 @@
     <string name="settings_peer_connect">Connect</string>
     <string name="settings_peer_connected_title">Connected devices</string>
     <string name="settings_peer_disconnect">Disconnect</string>
+    <string name="peer_radio_required_title">Turn on device radios</string>
+    <string name="peer_radio_required_detail">To continue, turn on %1$s.</string>
+    <string name="peer_radio_name_bluetooth">Bluetooth</string>
+    <string name="peer_radio_name_wifi">Wi‑Fi</string>
+    <string name="peer_radio_name_location">Location</string>
+    <string name="peer_radio_required_bluetooth">Enable Bluetooth</string>
+    <string name="peer_radio_required_wifi">Open Wi‑Fi settings</string>
+    <string name="peer_radio_required_location">Open Location settings</string>
+    <string name="peer_radio_required_cancel">Cancel</string>
+    <string name="peer_radio_required_snackbar">Turn on Bluetooth, Wi‑Fi, and Location to use nearby sync.</string>
     <string name="partner_parent_focus_heading">How mom might be feeling</string>
     <string name="partner_parent_focus_summary">Use these cues to check in with her and offer support that feels right.</string>
     <string name="partner_baby_overview_heading">Baby at a glance</string>

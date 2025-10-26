@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [JournalEntryEntity::class],
     version = 2,
-    exportSchema = true,
+    exportSchema = false,
 )
 @TypeConverters(JournalTypeConverters::class)
 abstract class JournalDatabase : RoomDatabase() {

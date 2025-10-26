@@ -372,7 +372,7 @@ fun BabyDevelopmentTrackerScreen(
                     } else {
                         val secret = userPreferences.familyLinkSecret
                             ?: UUID.randomUUID().toString()
-                        val startLinking = {
+                        val startLinking: () -> Unit = {
                             isPartnerLinking = true
                             scope.launch {
                                 try {
@@ -394,6 +394,7 @@ fun BabyDevelopmentTrackerScreen(
                                     isPartnerLinking = false
                                 }
                             }
+                            Unit
                         }
                         val handlePermissionDenied = {
                             partnerLinkError = context.getString(R.string.settings_peer_permission_required)
@@ -435,7 +436,7 @@ fun BabyDevelopmentTrackerScreen(
                         context.getString(R.string.settings_partner_code_registration_error)
                 }
                 else -> {
-                    val beginRegistration = {
+                    val beginRegistration: () -> Unit = {
                         isPartnerCodeSubmitting = true
                         scope.launch {
                             when (val result = registerPartnerInvite(code)) {
@@ -457,6 +458,7 @@ fun BabyDevelopmentTrackerScreen(
                             }
                             isPartnerCodeSubmitting = false
                         }
+                        Unit
                     }
                     val handlePermissionDenied = {
                         partnerCodeError =
@@ -818,10 +820,10 @@ fun BabyDevelopmentTrackerScreen(
                         connectionState = connectionState,
                         onStartAdvertising = {
                             ensureNearbyPermissions(
-                                onGranted = {
+                                {
                                     familySyncGateway.startAdvertising(deviceEndpointName)
                                 },
-                                onDenied = {
+                                {
                                     scope.launch {
                                         snackbarHostState.showSnackbar(
                                             context.getString(R.string.settings_peer_permission_required)
@@ -833,10 +835,10 @@ fun BabyDevelopmentTrackerScreen(
                         onStopAdvertising = { familySyncGateway.stopAdvertising() },
                         onStartDiscovery = {
                             ensureNearbyPermissions(
-                                onGranted = {
+                                {
                                     familySyncGateway.startDiscovery(deviceEndpointName)
                                 },
-                                onDenied = {
+                                {
                                     scope.launch {
                                         snackbarHostState.showSnackbar(
                                             context.getString(R.string.settings_peer_permission_required)

@@ -602,11 +602,11 @@ fun BabyDevelopmentTrackerScreen(
             nearbyPermissionsGranted = nearbyPermissionsGranted,
             onRequestNearbyPermissions = { onResult ->
                 ensureNearbyPermissions(
-                    onGranted = {
+                    {
                         familySyncGateway.startAdvertising(deviceEndpointName)
                         onResult(true)
                     },
-                    onDenied = {
+                    {
                         onResult(false)
                     }
                 )

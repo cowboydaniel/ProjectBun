@@ -1,10 +1,12 @@
 package com.example.babydevelopmenttracker
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -171,6 +173,9 @@ fun BabyDevelopmentTrackerApp() {
             familyIdProvider = {
                 userPreferencesRepository.userPreferences.firstOrNull()?.familyLinkId
             },
+            authTokenProvider = {
+                userPreferencesRepository.getDeviceAuthToken()
+            },
             transactionRunner = { block -> journalDatabase.withTransaction { block() } }
         )
     }
@@ -192,6 +197,19 @@ fun BabyDevelopmentTrackerApp() {
             )
         }
     }
+}
+
+@SuppressLint("HardwareIds")
+private fun getDeviceIdentifier(context: Context): String {
+    val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+    if (!androidId.isNullOrBlank()) {
+        return androidId
+    }
+    val manufacturer = Build.MANUFACTURER.takeIf { it.isNotBlank() }?.trim()
+    val model = Build.MODEL.takeIf { it.isNotBlank() }?.trim()
+    return listOfNotNull(manufacturer, model)
+        .joinToString(separator = "-")
+        .ifEmpty { "unknown-device" }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -249,7 +267,7 @@ fun BabyDevelopmentTrackerScreen(
         partnerLinkError = null
     }
 
-    LaunchedEffect(userPreferences.familyLinkId) {
+    LaunchedEffect(userPreferences.familyLinkId, userPreferences.deviceAuthToken) {
         journalRepository.refreshFromRemote()
     }
 
@@ -269,7 +287,10 @@ fun BabyDevelopmentTrackerScreen(
             userPreferencesRepository.updateFamilyLink(familyId, null)
             val response = familySyncService.registerFamilyMember(
                 familyId,
-                RegisterFamilyMemberRequest(inviteCode = code)
+                RegisterFamilyMemberRequest(
+                    inviteCode = code,
+                    deviceIdentifier = getDeviceIdentifier(context)
+                )
             )
             userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite = true)
             if (remindersEnabled) {

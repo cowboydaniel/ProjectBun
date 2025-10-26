@@ -288,80 +288,85 @@ fun BabyDevelopmentTrackerScreen(
     }
 
     val handlePartnerLinkToggle: (Boolean) -> Unit = { approved ->
-        if (isPartnerLinking) return@handlePartnerLinkToggle
-        partnerLinkError = null
-        if (approved) {
-            if (inviteCode == null) {
-                partnerLinkError =
-                    context.getString(R.string.settings_partner_connection_missing_code)
-                return@handlePartnerLinkToggle
-            }
-            val familyId = PartnerInviteCode.familyIdForInviteCode(inviteCode)
-            if (familyId == null) {
-                partnerLinkError = context.getString(R.string.settings_partner_connection_error)
-                return@handlePartnerLinkToggle
-            }
-            val secret = userPreferences.familyLinkSecret ?: UUID.randomUUID().toString()
-            isPartnerLinking = true
-            scope.launch {
-                try {
-                    userPreferencesRepository.updateFamilyLink(familyId, secret)
-                    val response = familySyncService.createFamily(
-                        familyId,
-                        CreateFamilyRequest(secret = secret)
-                    )
-                    userPreferencesRepository.updateDeviceAuthToken(response.authToken)
-                    userPreferencesRepository.updatePartnerLinkApproved(true)
-                } catch (error: Exception) {
-                    Log.e(FAMILY_SYNC_TAG, "Failed to create family link", error)
+        if (!isPartnerLinking) {
+            partnerLinkError = null
+            if (approved) {
+                val code = inviteCode
+                if (code == null) {
                     partnerLinkError =
-                        context.getString(R.string.settings_partner_connection_error)
-                    userPreferencesRepository.updateFamilyLink(null, null)
-                    userPreferencesRepository.updateDeviceAuthToken(null)
-                    userPreferencesRepository.updatePartnerLinkApproved(false)
-                    userPreferencesRepository.updateShareJournalWithPartner(false)
-                } finally {
-                    isPartnerLinking = false
+                        context.getString(R.string.settings_partner_connection_missing_code)
+                } else {
+                    val familyId = PartnerInviteCode.familyIdForInviteCode(code)
+                    if (familyId == null) {
+                        partnerLinkError =
+                            context.getString(R.string.settings_partner_connection_error)
+                    } else {
+                        val secret = userPreferences.familyLinkSecret
+                            ?: UUID.randomUUID().toString()
+                        isPartnerLinking = true
+                        scope.launch {
+                            try {
+                                userPreferencesRepository.updateFamilyLink(familyId, secret)
+                                val response = familySyncService.createFamily(
+                                    familyId,
+                                    CreateFamilyRequest(secret = secret)
+                                )
+                                userPreferencesRepository.updateDeviceAuthToken(response.authToken)
+                                userPreferencesRepository.updatePartnerLinkApproved(true)
+                            } catch (error: Exception) {
+                                Log.e(FAMILY_SYNC_TAG, "Failed to create family link", error)
+                                partnerLinkError =
+                                    context.getString(R.string.settings_partner_connection_error)
+                                userPreferencesRepository.updateFamilyLink(null, null)
+                                userPreferencesRepository.updateDeviceAuthToken(null)
+                                userPreferencesRepository.updatePartnerLinkApproved(false)
+                                userPreferencesRepository.updateShareJournalWithPartner(false)
+                            } finally {
+                                isPartnerLinking = false
+                            }
+                        }
+                    }
                 }
-            }
-        } else {
-            isPartnerLinking = true
-            scope.launch {
-                try {
-                    userPreferencesRepository.updatePartnerLinkApproved(false)
-                    userPreferencesRepository.updateShareJournalWithPartner(false)
-                    userPreferencesRepository.updateFamilyLink(null, null)
-                    userPreferencesRepository.updateDeviceAuthToken(null)
-                } finally {
-                    isPartnerLinking = false
+            } else {
+                isPartnerLinking = true
+                scope.launch {
+                    try {
+                        userPreferencesRepository.updatePartnerLinkApproved(false)
+                        userPreferencesRepository.updateShareJournalWithPartner(false)
+                        userPreferencesRepository.updateFamilyLink(null, null)
+                        userPreferencesRepository.updateDeviceAuthToken(null)
+                    } finally {
+                        isPartnerLinking = false
+                    }
                 }
             }
         }
     }
 
     val handlePartnerCodeSubmit: (String) -> Unit = { code ->
-        if (isPartnerCodeSubmitting) return@handlePartnerCodeSubmit
-        clearPartnerCodeStatus()
-        scope.launch {
-            isPartnerCodeSubmitting = true
-            when (val result = registerPartnerInvite(code)) {
-                is PartnerInviteOutcome.Success -> {
-                    val targetDate = LocalDate.ofEpochDay(result.epochDay)
-                    partnerCodeSuccess = context.getString(
-                        R.string.settings_partner_code_success,
-                        targetDate.format(dateFormatter)
-                    )
-                }
-                is PartnerInviteOutcome.Error -> {
-                    partnerCodeError = when (result.reason) {
-                        PartnerInviteError.InvalidCode ->
-                            context.getString(R.string.settings_partner_code_error)
-                        PartnerInviteError.RegistrationFailed ->
-                            context.getString(R.string.settings_partner_code_registration_error)
+        if (!isPartnerCodeSubmitting) {
+            clearPartnerCodeStatus()
+            scope.launch {
+                isPartnerCodeSubmitting = true
+                when (val result = registerPartnerInvite(code)) {
+                    is PartnerInviteOutcome.Success -> {
+                        val targetDate = LocalDate.ofEpochDay(result.epochDay)
+                        partnerCodeSuccess = context.getString(
+                            R.string.settings_partner_code_success,
+                            targetDate.format(dateFormatter)
+                        )
+                    }
+                    is PartnerInviteOutcome.Error -> {
+                        partnerCodeError = when (result.reason) {
+                            PartnerInviteError.InvalidCode ->
+                                context.getString(R.string.settings_partner_code_error)
+                            PartnerInviteError.RegistrationFailed ->
+                                context.getString(R.string.settings_partner_code_registration_error)
+                        }
                     }
                 }
+                isPartnerCodeSubmitting = false
             }
-            isPartnerCodeSubmitting = false
         }
     }
 
@@ -372,10 +377,10 @@ fun BabyDevelopmentTrackerScreen(
                     context.getString(R.string.journal_partner_restricted_snackbar)
                 )
             }
-            return@handleShareJournalToggle
-        }
-        scope.launch {
-            userPreferencesRepository.updateShareJournalWithPartner(share)
+        } else {
+            scope.launch {
+                userPreferencesRepository.updateShareJournalWithPartner(share)
+            }
         }
     }
 

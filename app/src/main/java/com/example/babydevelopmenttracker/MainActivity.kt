@@ -278,6 +278,39 @@ fun BabyDevelopmentTrackerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val journalExporter = remember(context) { JournalPdfExporter(context) }
 
+    val nearbyPermissions = remember { requiredNearbyPermissions() }
+    var pendingNearbyPermissionGrantedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingNearbyPermissionDeniedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val nearbyPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val granted = results.all { it.value }
+        val grantedAction = pendingNearbyPermissionGrantedAction
+        val deniedAction = pendingNearbyPermissionDeniedAction
+        pendingNearbyPermissionGrantedAction = null
+        pendingNearbyPermissionDeniedAction = null
+        if (granted) {
+            grantedAction?.invoke()
+        } else {
+            deniedAction?.invoke()
+        }
+    }
+    val ensureNearbyPermissions: (onGranted: () -> Unit, onDenied: () -> Unit) -> Unit = remember(nearbyPermissions, context) {
+        { onGranted, onDenied ->
+            if (hasAllPermissions(context, nearbyPermissions)) {
+                onGranted()
+            } else {
+                pendingNearbyPermissionGrantedAction = onGranted
+                pendingNearbyPermissionDeniedAction = onDenied
+                if (nearbyPermissions.isNotEmpty()) {
+                    nearbyPermissionLauncher.launch(nearbyPermissions)
+                } else {
+                    onGranted()
+                }
+            }
+        }
+    }
+
     LaunchedEffect(inviteCode) {
         partnerLinkError = null
     }
@@ -339,27 +372,33 @@ fun BabyDevelopmentTrackerScreen(
                     } else {
                         val secret = userPreferences.familyLinkSecret
                             ?: UUID.randomUUID().toString()
-                        isPartnerLinking = true
-                        scope.launch {
-                            try {
-                                userPreferencesRepository.updateFamilyLink(familyId, secret)
-                                familySyncGateway.createFamily(
-                                    familyId,
-                                    CreateFamilyRequest(secret = secret)
-                                )
-                                userPreferencesRepository.updatePartnerLinkApproved(true)
-                                familySyncGateway.startAdvertising(deviceEndpointName)
-                            } catch (error: Exception) {
-                                Log.e(FAMILY_SYNC_TAG, "Failed to create family link", error)
-                                partnerLinkError =
-                                    context.getString(R.string.settings_partner_connection_error)
-                                userPreferencesRepository.updateFamilyLink(null, null)
-                                userPreferencesRepository.updatePartnerLinkApproved(false)
-                                userPreferencesRepository.updateShareJournalWithPartner(false)
-                            } finally {
-                                isPartnerLinking = false
+                        val startLinking = {
+                            isPartnerLinking = true
+                            scope.launch {
+                                try {
+                                    userPreferencesRepository.updateFamilyLink(familyId, secret)
+                                    familySyncGateway.createFamily(
+                                        familyId,
+                                        CreateFamilyRequest(secret = secret)
+                                    )
+                                    userPreferencesRepository.updatePartnerLinkApproved(true)
+                                    familySyncGateway.startAdvertising(deviceEndpointName)
+                                } catch (error: Exception) {
+                                    Log.e(FAMILY_SYNC_TAG, "Failed to create family link", error)
+                                    partnerLinkError =
+                                        context.getString(R.string.settings_partner_connection_error)
+                                    userPreferencesRepository.updateFamilyLink(null, null)
+                                    userPreferencesRepository.updatePartnerLinkApproved(false)
+                                    userPreferencesRepository.updateShareJournalWithPartner(false)
+                                } finally {
+                                    isPartnerLinking = false
+                                }
                             }
                         }
+                        val handlePermissionDenied = {
+                            partnerLinkError = context.getString(R.string.settings_peer_permission_required)
+                        }
+                        ensureNearbyPermissions(startLinking, handlePermissionDenied)
                     }
                 }
             } else {
@@ -385,26 +424,46 @@ fun BabyDevelopmentTrackerScreen(
     val handlePartnerCodeSubmit: (String) -> Unit = { code ->
         if (!isPartnerCodeSubmitting) {
             clearPartnerCodeStatus()
-            scope.launch {
-                isPartnerCodeSubmitting = true
-                when (val result = registerPartnerInvite(code)) {
-                    is PartnerInviteOutcome.Success -> {
-                        val targetDate = LocalDate.ofEpochDay(result.epochDay)
-                        partnerCodeSuccess = context.getString(
-                            R.string.settings_partner_code_success,
-                            targetDate.format(dateFormatter)
-                        )
-                    }
-                    is PartnerInviteOutcome.Error -> {
-                        partnerCodeError = when (result.reason) {
-                            PartnerInviteError.InvalidCode ->
-                                context.getString(R.string.settings_partner_code_error)
-                            PartnerInviteError.RegistrationFailed ->
-                                context.getString(R.string.settings_partner_code_registration_error)
+            val parsedEpochDay = PartnerInviteCode.parse(code)
+            val familyId = PartnerInviteCode.familyIdForInviteCode(code)
+            when {
+                parsedEpochDay == null -> {
+                    partnerCodeError = context.getString(R.string.settings_partner_code_error)
+                }
+                familyId == null -> {
+                    partnerCodeError =
+                        context.getString(R.string.settings_partner_code_registration_error)
+                }
+                else -> {
+                    val beginRegistration = {
+                        isPartnerCodeSubmitting = true
+                        scope.launch {
+                            when (val result = registerPartnerInvite(code)) {
+                                is PartnerInviteOutcome.Success -> {
+                                    val targetDate = LocalDate.ofEpochDay(result.epochDay)
+                                    partnerCodeSuccess = context.getString(
+                                        R.string.settings_partner_code_success,
+                                        targetDate.format(dateFormatter)
+                                    )
+                                }
+                                is PartnerInviteOutcome.Error -> {
+                                    partnerCodeError = when (result.reason) {
+                                        PartnerInviteError.InvalidCode ->
+                                            context.getString(R.string.settings_partner_code_error)
+                                        PartnerInviteError.RegistrationFailed ->
+                                            context.getString(R.string.settings_partner_code_registration_error)
+                                    }
+                                }
+                            }
+                            isPartnerCodeSubmitting = false
                         }
                     }
+                    val handlePermissionDenied = {
+                        partnerCodeError =
+                            context.getString(R.string.settings_peer_permission_required)
+                    }
+                    ensureNearbyPermissions(beginRegistration, handlePermissionDenied)
                 }
-                isPartnerCodeSubmitting = false
             }
         }
     }
@@ -757,9 +816,35 @@ fun BabyDevelopmentTrackerScreen(
                         partnerCodeSuccessMessage = partnerCodeSuccess,
                         dueDateFromPartnerInvite = dueDateFromPartnerInvite,
                         connectionState = connectionState,
-                        onStartAdvertising = { familySyncGateway.startAdvertising(deviceEndpointName) },
+                        onStartAdvertising = {
+                            ensureNearbyPermissions(
+                                onGranted = {
+                                    familySyncGateway.startAdvertising(deviceEndpointName)
+                                },
+                                onDenied = {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            context.getString(R.string.settings_peer_permission_required)
+                                        )
+                                    }
+                                }
+                            )
+                        },
                         onStopAdvertising = { familySyncGateway.stopAdvertising() },
-                        onStartDiscovery = { familySyncGateway.startDiscovery(deviceEndpointName) },
+                        onStartDiscovery = {
+                            ensureNearbyPermissions(
+                                onGranted = {
+                                    familySyncGateway.startDiscovery(deviceEndpointName)
+                                },
+                                onDenied = {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            context.getString(R.string.settings_peer_permission_required)
+                                        )
+                                    }
+                                }
+                            )
+                        },
                         onStopDiscovery = { familySyncGateway.stopDiscovery() },
                         onConnectEndpoint = { id -> familySyncGateway.connectToEndpoint(id) },
                         onDisconnectEndpoint = { id -> familySyncGateway.disconnectEndpoint(id) }
@@ -2173,6 +2258,32 @@ fun PartnerSupportCard(
                 }
             }
         }
+    }
+}
+
+private fun requiredNearbyPermissions(): Array<String> {
+    val permissions = mutableListOf(
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        permissions += listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.BLUETOOTH_CONNECT,
+        )
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions += Manifest.permission.NEARBY_WIFI_DEVICES
+    }
+    return permissions.distinct().toTypedArray()
+}
+
+private fun hasAllPermissions(context: Context, permissions: Array<String>): Boolean {
+    if (permissions.isEmpty()) {
+        return true
+    }
+    return permissions.all { permission ->
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
     }
 }
 

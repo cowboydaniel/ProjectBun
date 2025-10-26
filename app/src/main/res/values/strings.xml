@@ -73,6 +73,7 @@
     <string name="settings_partner_journal_toggle_title">Share journal with partner</string>
     <string name="settings_partner_journal_toggle_description">Let your partner read and add journal entries when you approve the connection.</string>
     <string name="settings_partner_connection_error">We couldn’t create your family link. Check your connection and try again.</string>
+    <string name="settings_peer_permission_required">We need nearby device access to link your family. Grant permission and try again.</string>
     <string name="settings_partner_connection_missing_code">Add a due date to generate your invite code before enabling sharing.</string>
     <string name="settings_partner_code_title">Add your invite code</string>
     <string name="settings_partner_code_description">Enter the code the expectant parent shared to match their due date.</string>

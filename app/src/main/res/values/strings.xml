@@ -92,6 +92,7 @@
     <string name="settings_peer_discover_start">Find nearby devices</string>
     <string name="settings_peer_discover_stop">Stop scanning</string>
     <string name="settings_peer_discovered_title">Devices found nearby</string>
+    <string name="settings_peer_discovered_empty">Keep this screen open while we scan. Make sure another device has sharing enabled.</string>
     <string name="settings_peer_connect">Connect</string>
     <string name="settings_peer_connected_title">Connected devices</string>
     <string name="settings_peer_disconnect">Disconnect</string>

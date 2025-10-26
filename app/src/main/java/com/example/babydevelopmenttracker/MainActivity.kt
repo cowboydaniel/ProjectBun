@@ -1586,11 +1586,13 @@ private fun PeerConnectionControls(
             modifier = Modifier.padding(top = 8.dp)
         )
 
+        val advertising = connectionState.advertising
+        val discovering = connectionState.discovering
+
         Row(
             modifier = Modifier.padding(top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            val advertising = connectionState.advertising
             Button(onClick = if (advertising) onStopAdvertising else onStartAdvertising) {
                 Text(
                     text = stringResource(
@@ -1602,7 +1604,6 @@ private fun PeerConnectionControls(
                     )
                 )
             }
-            val discovering = connectionState.discovering
             Button(onClick = if (discovering) onStopDiscovery else onStartDiscovery) {
                 Text(
                     text = stringResource(

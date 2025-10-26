@@ -116,6 +116,12 @@
     <string name="onboarding_partner_code_description">Ask the expectant parent for their invite code—they can find it in Settings—so we can match their due date.</string>
     <string name="onboarding_partner_code_placeholder">Type the invite code</string>
     <string name="onboarding_partner_code_error">We couldn’t verify that code. Check it and try again.</string>
+    <string name="onboarding_partner_permissions_title">Allow nearby device access</string>
+    <string name="onboarding_partner_permissions_description">Give the app permission to use Bluetooth and nearby devices so the expectant parent can find your phone.</string>
+    <string name="onboarding_partner_permissions_button">Allow device permissions</string>
+    <string name="onboarding_partner_permissions_preparing">Permissions enabled. Getting &quot;%1$s&quot; ready to be found…</string>
+    <string name="onboarding_partner_permissions_success">Permissions enabled. Ask the expectant parent to scan for &quot;%1$s&quot;.</string>
+    <string name="onboarding_partner_permissions_error">We need nearby device access to continue. Grant the permission to move on.</string>
     <string name="journal_title">Pregnancy journal</string>
     <string name="journal_export_action">Export to PDF</string>
     <string name="journal_add_entry">Add journal entry</string>

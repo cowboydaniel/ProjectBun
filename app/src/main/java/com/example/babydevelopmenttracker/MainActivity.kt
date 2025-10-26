@@ -279,12 +279,16 @@ fun BabyDevelopmentTrackerScreen(
     val journalExporter = remember(context) { JournalPdfExporter(context) }
 
     val nearbyPermissions = remember { requiredNearbyPermissions() }
+    var nearbyPermissionsGranted by remember {
+        mutableStateOf(hasAllPermissions(context, nearbyPermissions))
+    }
     var pendingNearbyPermissionGrantedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var pendingNearbyPermissionDeniedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val nearbyPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         val granted = results.all { it.value }
+        nearbyPermissionsGranted = granted
         val grantedAction = pendingNearbyPermissionGrantedAction
         val deniedAction = pendingNearbyPermissionDeniedAction
         pendingNearbyPermissionGrantedAction = null
@@ -298,6 +302,7 @@ fun BabyDevelopmentTrackerScreen(
     val ensureNearbyPermissions: (onGranted: () -> Unit, onDenied: () -> Unit) -> Unit = remember(nearbyPermissions, context) {
         { onGranted, onDenied ->
             if (hasAllPermissions(context, nearbyPermissions)) {
+                nearbyPermissionsGranted = true
                 onGranted()
             } else {
                 pendingNearbyPermissionGrantedAction = onGranted
@@ -305,6 +310,7 @@ fun BabyDevelopmentTrackerScreen(
                 if (nearbyPermissions.isNotEmpty()) {
                     nearbyPermissionLauncher.launch(nearbyPermissions)
                 } else {
+                    nearbyPermissionsGranted = true
                     onGranted()
                 }
             }
@@ -322,6 +328,12 @@ fun BabyDevelopmentTrackerScreen(
     LaunchedEffect(canPartnerViewJournal, familyRole) {
         if (familyRole == FamilyRole.PARTNER_SUPPORTER && !canPartnerViewJournal) {
             journalDestination = JournalDestination.List
+        }
+    }
+
+    LaunchedEffect(onboardingCompleted, familyRole, nearbyPermissionsGranted) {
+        if (!onboardingCompleted && familyRole == FamilyRole.PARTNER_SUPPORTER && nearbyPermissionsGranted) {
+            familySyncGateway.startAdvertising(deviceEndpointName)
         }
     }
 
@@ -346,6 +358,7 @@ fun BabyDevelopmentTrackerScreen(
                 reminderScheduler.scheduleWeeklyReminder(epochDay)
             }
             userPreferencesRepository.updatePartnerLinkApproved(true)
+            familySyncGateway.stopAdvertising()
             familySyncGateway.startDiscovery(deviceEndpointName)
             PartnerInviteOutcome.Success(epochDay)
         } catch (error: Exception) {
@@ -563,6 +576,9 @@ fun BabyDevelopmentTrackerScreen(
             remindersEnabled = remindersEnabled,
             onSelectFamilyRole = { role ->
                 showPermissionRationale = false
+                if (role != FamilyRole.PARTNER_SUPPORTER) {
+                    familySyncGateway.stopAdvertising()
+                }
                 scope.launch { userPreferencesRepository.updateFamilyRole(role) }
                 Unit
             },
@@ -582,7 +598,21 @@ fun BabyDevelopmentTrackerScreen(
                 scope.launch { userPreferencesRepository.updateOnboardingCompleted(true) }
                 Unit
             },
-            showPermissionRationale = showPermissionRationale
+            showPermissionRationale = showPermissionRationale,
+            nearbyPermissionsGranted = nearbyPermissionsGranted,
+            onRequestNearbyPermissions = { onResult ->
+                ensureNearbyPermissions(
+                    onGranted = {
+                        familySyncGateway.startAdvertising(deviceEndpointName)
+                        onResult(true)
+                    },
+                    onDenied = {
+                        onResult(false)
+                    }
+                )
+            },
+            isPartnerAdvertising = connectionState.advertising,
+            deviceEndpointName = deviceEndpointName
         )
     } else {
         ModalNavigationDrawer(
@@ -1834,11 +1864,24 @@ private fun OnboardingFlow(
     onReminderToggle: (Boolean) -> Unit,
     onFinish: () -> Unit,
     showPermissionRationale: Boolean,
+    nearbyPermissionsGranted: Boolean,
+    onRequestNearbyPermissions: (onResult: (Boolean) -> Unit) -> Unit,
+    isPartnerAdvertising: Boolean,
+    deviceEndpointName: String,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val totalSteps = 3
     var step by remember { mutableStateOf(0) }
+    var selectedRole by remember(familyRole) { mutableStateOf(familyRole) }
+    val isPartnerRoleSelected = selectedRole == FamilyRole.PARTNER_SUPPORTER
+    val totalSteps = if (isPartnerRoleSelected) 4 else 3
+
+    LaunchedEffect(totalSteps) {
+        if (step >= totalSteps) {
+            step = totalSteps - 1
+        }
+    }
+
     val defaultDueDate = remember(today) { today.plusWeeks(20) }
     val initialDueDateMillis = remember(dueDate, defaultDueDate, zoneId) {
         (dueDate ?: defaultDueDate).atStartOfDay(zoneId).toInstant().toEpochMilli()
@@ -1847,22 +1890,21 @@ private fun OnboardingFlow(
     LaunchedEffect(initialDueDateMillis) {
         datePickerState.selectedDateMillis = initialDueDateMillis
     }
-    var selectedRole by remember(familyRole) { mutableStateOf(familyRole) }
     var partnerCode by rememberSaveable { mutableStateOf("") }
     var partnerCodeError by remember { mutableStateOf<String?>(null) }
     var isPartnerCodeSubmitting by remember { mutableStateOf(false) }
+    var permissionRequestAttempted by rememberSaveable { mutableStateOf(false) }
     val onboardingScope = rememberCoroutineScope()
 
     val selectedDate = datePickerState.selectedDateMillis?.let { millis ->
         Instant.ofEpochMilli(millis).atZone(zoneId).toLocalDate()
     }
 
-    val isPartnerRoleSelected = selectedRole == FamilyRole.PARTNER_SUPPORTER
-
     LaunchedEffect(isPartnerRoleSelected) {
         if (!isPartnerRoleSelected) {
             partnerCode = ""
             partnerCodeError = null
+            permissionRequestAttempted = false
         }
         isPartnerCodeSubmitting = false
     }
@@ -1870,9 +1912,14 @@ private fun OnboardingFlow(
     val canProceed = when (step) {
         0 -> selectedRole != null
         1 -> if (isPartnerRoleSelected) {
-            partnerCode.isNotBlank() && !isPartnerCodeSubmitting
+            nearbyPermissionsGranted
         } else {
             selectedDate != null
+        }
+        2 -> if (isPartnerRoleSelected) {
+            partnerCode.isNotBlank() && !isPartnerCodeSubmitting
+        } else {
+            true
         }
         else -> true
     }
@@ -1918,6 +1965,72 @@ private fun OnboardingFlow(
                 1 -> {
                     if (isPartnerRoleSelected) {
                         Text(
+                            text = stringResource(id = R.string.onboarding_partner_permissions_title),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = stringResource(id = R.string.onboarding_partner_permissions_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                permissionRequestAttempted = true
+                                onRequestNearbyPermissions { granted ->
+                                    permissionRequestAttempted = true
+                                    if (!granted) {
+                                        // permission denied message handled below
+                                    }
+                                }
+                            },
+                            enabled = !nearbyPermissionsGranted
+                        ) {
+                            Text(text = stringResource(id = R.string.onboarding_partner_permissions_button))
+                        }
+                        if (nearbyPermissionsGranted) {
+                            val statusText = if (isPartnerAdvertising) {
+                                stringResource(
+                                    id = R.string.onboarding_partner_permissions_success,
+                                    deviceEndpointName
+                                )
+                            } else {
+                                stringResource(
+                                    id = R.string.onboarding_partner_permissions_preparing,
+                                    deviceEndpointName
+                                )
+                            }
+                            Text(
+                                text = statusText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 12.dp)
+                            )
+                        } else if (permissionRequestAttempted) {
+                            Text(
+                                text = stringResource(id = R.string.onboarding_partner_permissions_error),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 12.dp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = stringResource(id = R.string.onboarding_due_date_title),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = stringResource(id = R.string.onboarding_due_date_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        DatePicker(state = datePickerState)
+                    }
+                }
+                2 -> {
+                    if (isPartnerRoleSelected) {
+                        Text(
                             text = stringResource(id = R.string.onboarding_partner_code_title),
                             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
                         )
@@ -1949,69 +2062,19 @@ private fun OnboardingFlow(
                             )
                         }
                     } else {
-                        Text(
-                            text = stringResource(id = R.string.onboarding_due_date_title),
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                        OnboardingNotificationsStep(
+                            remindersEnabled = remindersEnabled,
+                            onReminderToggle = onReminderToggle,
+                            showPermissionRationale = showPermissionRationale
                         )
-                        Text(
-                            text = stringResource(id = R.string.onboarding_due_date_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        DatePicker(state = datePickerState)
                     }
                 }
-                2 -> {
-                    Text(
-                        text = stringResource(id = R.string.onboarding_notifications_title),
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+                3 -> {
+                    OnboardingNotificationsStep(
+                        remindersEnabled = remindersEnabled,
+                        onReminderToggle = onReminderToggle,
+                        showPermissionRationale = showPermissionRationale
                     )
-                    Text(
-                        text = stringResource(id = R.string.onboarding_notifications_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.CenterStart)
-                                .padding(end = 72.dp)
-                        ) {
-                            Text(
-                                text = stringResource(id = R.string.reminder_toggle_title),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = stringResource(id = R.string.reminder_toggle_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                        Switch(
-                            checked = remindersEnabled,
-                            onCheckedChange = onReminderToggle,
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            modifier = Modifier.align(Alignment.CenterEnd)
-                        )
-                    }
-                    Text(
-                        text = stringResource(id = R.string.onboarding_notifications_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
-                    if (showPermissionRationale) {
-                        Text(
-                            text = stringResource(id = R.string.notifications_permission_rationale),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
                 }
             }
         }
@@ -2034,6 +2097,16 @@ private fun OnboardingFlow(
                             step += 1
                         }
                         1 -> if (isPartnerRoleSelected) {
+                            if (nearbyPermissionsGranted) {
+                                step += 1
+                            }
+                        } else {
+                            selectedDate?.let {
+                                onConfirmDueDate(it, false)
+                                step += 1
+                            }
+                        }
+                        2 -> if (isPartnerRoleSelected) {
                             if (!isPartnerCodeSubmitting) {
                                 onboardingScope.launch {
                                     isPartnerCodeSubmitting = true
@@ -2055,12 +2128,9 @@ private fun OnboardingFlow(
                                 }
                             }
                         } else {
-                            selectedDate?.let {
-                                onConfirmDueDate(it, false)
-                                step += 1
-                            }
+                            onFinish()
                         }
-                        2 -> onFinish()
+                        3 -> onFinish()
                     }
                 },
                 enabled = canProceed
@@ -2074,6 +2144,63 @@ private fun OnboardingFlow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun OnboardingNotificationsStep(
+    remindersEnabled: Boolean,
+    onReminderToggle: (Boolean) -> Unit,
+    showPermissionRationale: Boolean,
+) {
+    Text(
+        text = stringResource(id = R.string.onboarding_notifications_title),
+        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+    )
+    Text(
+        text = stringResource(id = R.string.onboarding_notifications_description),
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+    Spacer(modifier = Modifier.height(16.dp))
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(end = 72.dp)
+        ) {
+            Text(
+                text = stringResource(id = R.string.reminder_toggle_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = stringResource(id = R.string.reminder_toggle_description),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+        Switch(
+            checked = remindersEnabled,
+            onCheckedChange = onReminderToggle,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
+    }
+    Text(
+        text = stringResource(id = R.string.onboarding_notifications_hint),
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(top = 12.dp)
+    )
+    if (showPermissionRationale) {
+        Text(
+            text = stringResource(id = R.string.notifications_permission_rationale),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 

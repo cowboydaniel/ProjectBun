@@ -10,3 +10,6 @@ captures/
 
 # Kotlin
 *.iml
+
+gradle/wrapper/gradle-wrapper.jar
+gradle/wrapper/gradle-*/

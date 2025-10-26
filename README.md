@@ -13,7 +13,7 @@ An Android application built with Jetpack Compose that helps expectant parents e
 ## Getting Started
 
 1. Open the project in [Android Studio](https://developer.android.com/studio).
-2. Sync Gradle when prompted to download dependencies.
+2. Allow the IDE to sync the project with its bundled toolchain (Android Gradle Plugin 8.13.0 and Gradle 9.x). No wrapper scripts are checked in, so Android Studio or a locally installed Gradle distribution must drive the build.
 3. In the **Run/Debug Configurations** dialog, press **+ → Android App**. If the Module drop-down is empty, choose **Sync Project with Gradle Files** (toolbar icon) and reopen the dialog once the sync completes. Select the `:app` module and set the launch option to **Open Select Deployment Target Dialog** so you can pick a device each time. Save the configuration (for example, name it `Baby Development Tracker`).
 4. Connect an Android device with USB debugging enabled or start an emulator running Android 7.0 (API 24) or higher, then select it from the deployment target dialog.
 5. Use the new run configuration to build and run the **Baby Development Tracker** app.
@@ -29,8 +29,8 @@ An Android application built with Jetpack Compose that helps expectant parents e
 Instrumented and unit test targets are included via the default Android testing libraries. Execute them with:
 
 ```bash
-./gradlew test
-./gradlew connectedAndroidTest
+gradle test
+gradle connectedAndroidTest
 ```
 
 > **Note:** Running instrumented tests requires an Android device or emulator.

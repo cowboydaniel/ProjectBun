@@ -36,6 +36,7 @@ class JournalRepositoryTest {
             journalDao = fakeDao,
             familySyncService = fakeService,
             familyIdProvider = { "family-123" },
+            authTokenProvider = { "token-abc" },
             transactionRunner = { block -> block() },
             ioDispatcher = dispatcher
         )
@@ -142,19 +143,27 @@ class JournalRepositoryTest {
             throw UnsupportedOperationException("Not implemented in fake")
         }
 
-        override suspend fun fetchJournalEntries(familyId: String): List<JournalEntryPayload> =
+        override suspend fun fetchJournalEntries(
+            familyId: String,
+            authorization: String,
+        ): List<JournalEntryPayload> =
             remoteEntries.toList()
 
         override suspend fun upsertJournalEntry(
             familyId: String,
             entryId: String,
-            entry: JournalEntryPayload
+            entry: JournalEntryPayload,
+            authorization: String,
         ) {
             remoteEntries.removeAll { it.id == entryId }
             remoteEntries.add(entry)
         }
 
-        override suspend fun deleteJournalEntry(familyId: String, entryId: String) {
+        override suspend fun deleteJournalEntry(
+            familyId: String,
+            entryId: String,
+            authorization: String,
+        ) {
             remoteEntries.removeAll { it.id == entryId }
         }
     }

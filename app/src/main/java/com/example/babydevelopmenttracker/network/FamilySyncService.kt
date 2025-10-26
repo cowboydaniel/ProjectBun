@@ -11,6 +11,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Header
 import retrofit2.http.Path
 
 data class CreateFamilyRequest(val secret: String? = null)
@@ -46,6 +47,7 @@ interface FamilySyncService {
     @GET("families/{familyId}/journal")
     suspend fun fetchJournalEntries(
         @Path("familyId") familyId: String,
+        @Header("Authorization") authorization: String,
     ): List<JournalEntryPayload>
 
     @PUT("families/{familyId}/journal/{entryId}")
@@ -53,24 +55,27 @@ interface FamilySyncService {
         @Path("familyId") familyId: String,
         @Path("entryId") entryId: String,
         @Body entry: JournalEntryPayload,
+        @Header("Authorization") authorization: String,
     )
 
     @DELETE("families/{familyId}/journal/{entryId}")
     suspend fun deleteJournalEntry(
         @Path("familyId") familyId: String,
         @Path("entryId") entryId: String,
+        @Header("Authorization") authorization: String,
     )
 
     companion object {
-        private const val DEFAULT_BASE_URL = "https://example.com/api/"
+        private const val DEFAULT_BASE_URL = "https://family-sync.projectbun.dev/api/"
 
         fun create(
             baseUrl: String = DEFAULT_BASE_URL,
             client: OkHttpClient = defaultOkHttpClient(),
             moshi: Moshi = defaultMoshi(),
         ): FamilySyncService {
+            val normalizedBaseUrl = baseUrl.ifBlank { DEFAULT_BASE_URL }
             val retrofit = Retrofit.Builder()
-                .baseUrl(baseUrl)
+                .baseUrl(normalizedBaseUrl)
                 .addConverterFactory(MoshiConverterFactory.create(moshi))
                 .client(client)
                 .build()

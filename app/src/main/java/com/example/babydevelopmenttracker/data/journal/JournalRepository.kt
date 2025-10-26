@@ -16,6 +16,7 @@ class JournalRepository(
     private val journalDao: JournalDao,
     private val familySyncService: FamilySyncService,
     private val familyIdProvider: suspend () -> String?,
+    private val authTokenProvider: suspend () -> String?,
     private val transactionRunner: suspend (suspend () -> Unit) -> Unit,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -44,8 +45,12 @@ class JournalRepository(
     suspend fun refreshFromRemote() {
         withContext(ioDispatcher) {
             val familyId = familyIdProvider() ?: return@withContext
+            val authorization = authorizationHeader() ?: return@withContext
             runCatching {
-                val remoteEntries = familySyncService.fetchJournalEntries(familyId)
+                val remoteEntries = familySyncService.fetchJournalEntries(
+                    familyId,
+                    authorization,
+                )
                 transactionRunner {
                     journalDao.clearAll()
                     journalDao.upsert(remoteEntries.map { it.toEntity() })
@@ -58,11 +63,13 @@ class JournalRepository(
 
     private suspend fun pushRemote(entry: JournalEntry) {
         val familyId = familyIdProvider() ?: return
+        val authorization = authorizationHeader() ?: return
         runCatching {
             familySyncService.upsertJournalEntry(
                 familyId = familyId,
                 entryId = entry.id,
-                entry = entry.toPayload()
+                entry = entry.toPayload(),
+                authorization = authorization,
             )
         }.onFailure { error ->
             Log.w(JOURNAL_REPOSITORY_TAG, "Failed to push journal entry", error)
@@ -71,11 +78,21 @@ class JournalRepository(
 
     private suspend fun removeRemote(entryId: String) {
         val familyId = familyIdProvider() ?: return
+        val authorization = authorizationHeader() ?: return
         runCatching {
-            familySyncService.deleteJournalEntry(familyId, entryId)
+            familySyncService.deleteJournalEntry(
+                familyId,
+                entryId,
+                authorization,
+            )
         }.onFailure { error ->
             Log.w(JOURNAL_REPOSITORY_TAG, "Failed to delete journal entry remotely", error)
         }
+    }
+
+    private suspend fun authorizationHeader(): String? {
+        val token = authTokenProvider()?.takeUnless(String::isBlank) ?: return null
+        return "Bearer $token"
     }
 }
 

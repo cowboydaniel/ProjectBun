@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.babydevelopmenttracker.ui.theme.ThemePreference
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 
 val Context.userPreferencesDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -143,5 +144,10 @@ class UserPreferencesRepository(private val context: Context) {
                 preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN] = token
             }
         }
+    }
+
+    suspend fun getDeviceAuthToken(): String? {
+        val preferences = context.userPreferencesDataStore.data.firstOrNull() ?: return null
+        return preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN]
     }
 }

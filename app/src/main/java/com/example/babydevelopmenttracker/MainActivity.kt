@@ -67,6 +67,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -110,7 +111,9 @@ import com.example.babydevelopmenttracker.model.FetalGrowthTrends
 import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
 import com.example.babydevelopmenttracker.network.CreateFamilyRequest
-import com.example.babydevelopmenttracker.network.FamilySyncService
+import com.example.babydevelopmenttracker.network.FamilySyncGateway
+import com.example.babydevelopmenttracker.network.PeerConnectionState
+import com.example.babydevelopmenttracker.network.PeerToPeerFamilySyncGateway
 import com.example.babydevelopmenttracker.network.RegisterFamilyMemberRequest
 import com.example.babydevelopmenttracker.reminders.WeeklyReminderScheduler
 import com.example.babydevelopmenttracker.ui.theme.BabyDevelopmentTrackerTheme
@@ -164,17 +167,23 @@ fun BabyDevelopmentTrackerApp() {
     val context = LocalContext.current
     val userPreferencesRepository = remember(context) { UserPreferencesRepository(context) }
     val reminderScheduler = remember(context) { WeeklyReminderScheduler(context) }
-    val familySyncService = remember { FamilySyncService.create() }
+    val familySyncGateway = remember(context) { PeerToPeerFamilySyncGateway.create(context) }
+    DisposableEffect(familySyncGateway) {
+        onDispose { familySyncGateway.shutdown() }
+    }
+    val connectionState by familySyncGateway.connectionState.collectAsState(
+        initial = PeerConnectionState()
+    )
     val journalDatabase = remember(context) { JournalDatabase.getInstance(context) }
-    val journalRepository = remember(journalDatabase, familySyncService, userPreferencesRepository) {
+    val journalRepository = remember(journalDatabase, familySyncGateway, userPreferencesRepository) {
         JournalRepository(
             journalDao = journalDatabase.journalDao(),
-            familySyncService = familySyncService,
+            familySyncGateway = familySyncGateway,
             familyIdProvider = {
                 userPreferencesRepository.userPreferences.firstOrNull()?.familyLinkId
             },
-            authTokenProvider = {
-                userPreferencesRepository.getDeviceAuthToken()
+            familySecretProvider = {
+                userPreferencesRepository.userPreferences.firstOrNull()?.familyLinkSecret
             },
             transactionRunner = { block -> journalDatabase.withTransaction { block() } }
         )
@@ -192,8 +201,9 @@ fun BabyDevelopmentTrackerApp() {
                 userPreferences = userPreferences,
                 userPreferencesRepository = userPreferencesRepository,
                 reminderScheduler = reminderScheduler,
-                familySyncService = familySyncService,
-                journalRepository = journalRepository
+                familySyncGateway = familySyncGateway,
+                journalRepository = journalRepository,
+                connectionState = connectionState
             )
         }
     }
@@ -218,8 +228,9 @@ fun BabyDevelopmentTrackerScreen(
     userPreferences: UserPreferences,
     userPreferencesRepository: UserPreferencesRepository,
     reminderScheduler: WeeklyReminderScheduler,
-    familySyncService: FamilySyncService,
-    journalRepository: JournalRepository
+    familySyncGateway: FamilySyncGateway,
+    journalRepository: JournalRepository,
+    connectionState: PeerConnectionState
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -240,6 +251,10 @@ fun BabyDevelopmentTrackerScreen(
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
     val inviteCode = remember(dueDateEpochDay) {
         dueDateEpochDay?.let(PartnerInviteCode::generate)
+    }
+    val deviceEndpointName = remember {
+        val model = Build.MODEL?.takeIf { it.isNotBlank() }
+        model ?: context.getString(R.string.app_name)
     }
 
     val journalEntries by journalRepository.journalEntries.collectAsState(initial = emptyList())
@@ -267,7 +282,7 @@ fun BabyDevelopmentTrackerScreen(
         partnerLinkError = null
     }
 
-    LaunchedEffect(userPreferences.familyLinkId, userPreferences.deviceAuthToken) {
+    LaunchedEffect(userPreferences.familyLinkId, userPreferences.familyLinkSecret) {
         journalRepository.refreshFromRemote()
     }
 
@@ -285,24 +300,24 @@ fun BabyDevelopmentTrackerScreen(
 
         return try {
             userPreferencesRepository.updateFamilyLink(familyId, null)
-            val response = familySyncService.registerFamilyMember(
+            val response = familySyncGateway.registerFamilyMember(
                 familyId,
                 RegisterFamilyMemberRequest(
                     inviteCode = code,
                     deviceIdentifier = getDeviceIdentifier(context)
                 )
             )
+            userPreferencesRepository.updateFamilyLink(familyId, response.authToken)
             userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite = true)
             if (remindersEnabled) {
                 reminderScheduler.scheduleWeeklyReminder(epochDay)
             }
-            userPreferencesRepository.updateDeviceAuthToken(response.authToken)
             userPreferencesRepository.updatePartnerLinkApproved(true)
+            familySyncGateway.startDiscovery(deviceEndpointName)
             PartnerInviteOutcome.Success(epochDay)
         } catch (error: Exception) {
             Log.e(FAMILY_SYNC_TAG, "Failed to register family member", error)
             userPreferencesRepository.updateFamilyLink(null, null)
-            userPreferencesRepository.updateDeviceAuthToken(null)
             userPreferencesRepository.updatePartnerLinkApproved(false)
             PartnerInviteOutcome.Error(PartnerInviteError.RegistrationFailed)
         }
@@ -328,18 +343,17 @@ fun BabyDevelopmentTrackerScreen(
                         scope.launch {
                             try {
                                 userPreferencesRepository.updateFamilyLink(familyId, secret)
-                                val response = familySyncService.createFamily(
+                                familySyncGateway.createFamily(
                                     familyId,
                                     CreateFamilyRequest(secret = secret)
                                 )
-                                userPreferencesRepository.updateDeviceAuthToken(response.authToken)
                                 userPreferencesRepository.updatePartnerLinkApproved(true)
+                                familySyncGateway.startAdvertising(deviceEndpointName)
                             } catch (error: Exception) {
                                 Log.e(FAMILY_SYNC_TAG, "Failed to create family link", error)
                                 partnerLinkError =
                                     context.getString(R.string.settings_partner_connection_error)
                                 userPreferencesRepository.updateFamilyLink(null, null)
-                                userPreferencesRepository.updateDeviceAuthToken(null)
                                 userPreferencesRepository.updatePartnerLinkApproved(false)
                                 userPreferencesRepository.updateShareJournalWithPartner(false)
                             } finally {
@@ -355,7 +369,11 @@ fun BabyDevelopmentTrackerScreen(
                         userPreferencesRepository.updatePartnerLinkApproved(false)
                         userPreferencesRepository.updateShareJournalWithPartner(false)
                         userPreferencesRepository.updateFamilyLink(null, null)
-                        userPreferencesRepository.updateDeviceAuthToken(null)
+                        familySyncGateway.stopAdvertising()
+                        familySyncGateway.stopDiscovery()
+                        connectionState.connectedEndpoints.forEach { endpoint ->
+                            familySyncGateway.disconnectEndpoint(endpoint.id)
+                        }
                     } finally {
                         isPartnerLinking = false
                     }
@@ -737,7 +755,14 @@ fun BabyDevelopmentTrackerScreen(
                         onPartnerCodeInputChanged = clearPartnerCodeStatus,
                         partnerCodeError = partnerCodeError,
                         partnerCodeSuccessMessage = partnerCodeSuccess,
-                        dueDateFromPartnerInvite = dueDateFromPartnerInvite
+                        dueDateFromPartnerInvite = dueDateFromPartnerInvite,
+                        connectionState = connectionState,
+                        onStartAdvertising = { familySyncGateway.startAdvertising(deviceEndpointName) },
+                        onStopAdvertising = { familySyncGateway.stopAdvertising() },
+                        onStartDiscovery = { familySyncGateway.startDiscovery(deviceEndpointName) },
+                        onStopDiscovery = { familySyncGateway.stopDiscovery() },
+                        onConnectEndpoint = { id -> familySyncGateway.connectToEndpoint(id) },
+                        onDisconnectEndpoint = { id -> familySyncGateway.disconnectEndpoint(id) }
                     )
                 }
             }
@@ -1034,6 +1059,13 @@ private fun SettingsContent(
     partnerCodeError: String?,
     partnerCodeSuccessMessage: String?,
     dueDateFromPartnerInvite: Boolean,
+    connectionState: PeerConnectionState,
+    onStartAdvertising: () -> Unit,
+    onStopAdvertising: () -> Unit,
+    onStartDiscovery: () -> Unit,
+    onStopDiscovery: () -> Unit,
+    onConnectEndpoint: (String) -> Unit,
+    onDisconnectEndpoint: (String) -> Unit,
 ) {
     val clipboardManager = LocalClipboardManager.current
     val isPartnerRole = familyRole == FamilyRole.PARTNER_SUPPORTER
@@ -1273,6 +1305,16 @@ private fun SettingsContent(
             }
         }
 
+        PeerConnectionControls(
+            connectionState = connectionState,
+            onStartAdvertising = onStartAdvertising,
+            onStopAdvertising = onStopAdvertising,
+            onStartDiscovery = onStartDiscovery,
+            onStopDiscovery = onStopDiscovery,
+            onConnectEndpoint = onConnectEndpoint,
+            onDisconnectEndpoint = onDisconnectEndpoint,
+        )
+
         Column {
             Text(
                 text = stringResource(id = R.string.settings_due_date_title),
@@ -1401,6 +1443,135 @@ private fun SettingsContent(
                     textAlign = TextAlign.Start,
                     modifier = Modifier.padding(top = 8.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeerConnectionControls(
+    connectionState: PeerConnectionState,
+    onStartAdvertising: () -> Unit,
+    onStopAdvertising: () -> Unit,
+    onStartDiscovery: () -> Unit,
+    onStopDiscovery: () -> Unit,
+    onConnectEndpoint: (String) -> Unit,
+    onDisconnectEndpoint: (String) -> Unit,
+) {
+    Column {
+        Text(
+            text = stringResource(id = R.string.settings_peer_title),
+            style = MaterialTheme.typography.titleLarge
+        )
+        Text(
+            text = stringResource(id = R.string.settings_peer_description),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Row(
+            modifier = Modifier.padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            val advertising = connectionState.advertising
+            Button(onClick = if (advertising) onStopAdvertising else onStartAdvertising) {
+                Text(
+                    text = stringResource(
+                        id = if (advertising) {
+                            R.string.settings_peer_broadcast_stop
+                        } else {
+                            R.string.settings_peer_broadcast_start
+                        }
+                    )
+                )
+            }
+            val discovering = connectionState.discovering
+            Button(onClick = if (discovering) onStopDiscovery else onStartDiscovery) {
+                Text(
+                    text = stringResource(
+                        id = if (discovering) {
+                            R.string.settings_peer_discover_stop
+                        } else {
+                            R.string.settings_peer_discover_start
+                        }
+                    )
+                )
+            }
+        }
+
+        if (connectionState.discoveredEndpoints.isNotEmpty()) {
+            Column(
+                modifier = Modifier.padding(top = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.settings_peer_discovered_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                connectionState.discoveredEndpoints.forEach { endpoint ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 1.dp,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = endpoint.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Button(onClick = { onConnectEndpoint(endpoint.id) }) {
+                                Text(text = stringResource(id = R.string.settings_peer_connect))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (connectionState.connectedEndpoints.isNotEmpty()) {
+            Column(
+                modifier = Modifier.padding(top = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.settings_peer_connected_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                connectionState.connectedEndpoints.forEach { endpoint ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 1.dp,
+                        color = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = endpoint.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Button(onClick = { onDisconnectEndpoint(endpoint.id) }) {
+                                Text(text = stringResource(id = R.string.settings_peer_disconnect))
+                            }
+                        }
+                    }
+                }
             }
         }
     }

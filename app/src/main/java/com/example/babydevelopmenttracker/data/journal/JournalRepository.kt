@@ -1,7 +1,7 @@
 package com.example.babydevelopmenttracker.data.journal
 
 import android.util.Log
-import com.example.babydevelopmenttracker.network.FamilySyncService
+import com.example.babydevelopmenttracker.network.FamilySyncGateway
 import com.example.babydevelopmenttracker.network.JournalEntryPayload
 import java.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
@@ -14,9 +14,9 @@ private const val JOURNAL_REPOSITORY_TAG = "JournalRepository"
 
 class JournalRepository(
     private val journalDao: JournalDao,
-    private val familySyncService: FamilySyncService,
+    private val familySyncGateway: FamilySyncGateway,
     private val familyIdProvider: suspend () -> String?,
-    private val authTokenProvider: suspend () -> String?,
+    private val familySecretProvider: suspend () -> String?,
     private val transactionRunner: suspend (suspend () -> Unit) -> Unit,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -45,11 +45,11 @@ class JournalRepository(
     suspend fun refreshFromRemote() {
         withContext(ioDispatcher) {
             val familyId = familyIdProvider() ?: return@withContext
-            val authorization = authorizationHeader() ?: return@withContext
+            val secret = familySecretProvider()?.takeUnless(String::isBlank) ?: return@withContext
             runCatching {
-                val remoteEntries = familySyncService.fetchJournalEntries(
+                val remoteEntries = familySyncGateway.fetchJournalEntries(
                     familyId,
-                    authorization,
+                    secret,
                 )
                 transactionRunner {
                     journalDao.clearAll()
@@ -63,13 +63,12 @@ class JournalRepository(
 
     private suspend fun pushRemote(entry: JournalEntry) {
         val familyId = familyIdProvider() ?: return
-        val authorization = authorizationHeader() ?: return
+        val secret = familySecretProvider()?.takeUnless(String::isBlank) ?: return
         runCatching {
-            familySyncService.upsertJournalEntry(
+            familySyncGateway.upsertJournalEntry(
                 familyId = familyId,
-                entryId = entry.id,
+                secret = secret,
                 entry = entry.toPayload(),
-                authorization = authorization,
             )
         }.onFailure { error ->
             Log.w(JOURNAL_REPOSITORY_TAG, "Failed to push journal entry", error)
@@ -78,21 +77,16 @@ class JournalRepository(
 
     private suspend fun removeRemote(entryId: String) {
         val familyId = familyIdProvider() ?: return
-        val authorization = authorizationHeader() ?: return
+        val secret = familySecretProvider()?.takeUnless(String::isBlank) ?: return
         runCatching {
-            familySyncService.deleteJournalEntry(
-                familyId,
-                entryId,
-                authorization,
+            familySyncGateway.deleteJournalEntry(
+                familyId = familyId,
+                secret = secret,
+                entryId = entryId,
             )
         }.onFailure { error ->
             Log.w(JOURNAL_REPOSITORY_TAG, "Failed to delete journal entry remotely", error)
         }
-    }
-
-    private suspend fun authorizationHeader(): String? {
-        val token = authTokenProvider()?.takeUnless(String::isBlank) ?: return null
-        return "Bearer $token"
     }
 }
 

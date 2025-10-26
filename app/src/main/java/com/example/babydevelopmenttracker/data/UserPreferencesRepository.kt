@@ -28,7 +28,6 @@ internal object UserPreferencesKeys {
     val SHARE_JOURNAL_WITH_PARTNER = booleanPreferencesKey("share_journal_with_partner")
     val FAMILY_LINK_ID = stringPreferencesKey("family_link_id")
     val FAMILY_LINK_SECRET = stringPreferencesKey("family_link_secret")
-    val DEVICE_AUTH_TOKEN = stringPreferencesKey("device_auth_token")
 }
 
 data class UserPreferences(
@@ -42,7 +41,6 @@ data class UserPreferences(
     val shareJournalWithPartner: Boolean = false,
     val familyLinkId: String? = null,
     val familyLinkSecret: String? = null,
-    val deviceAuthToken: String? = null
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -64,7 +62,6 @@ class UserPreferencesRepository(private val context: Context) {
                     preferences[UserPreferencesKeys.SHARE_JOURNAL_WITH_PARTNER] ?: false,
                 familyLinkId = preferences[UserPreferencesKeys.FAMILY_LINK_ID],
                 familyLinkSecret = preferences[UserPreferencesKeys.FAMILY_LINK_SECRET],
-                deviceAuthToken = preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN]
             )
         }
 
@@ -136,18 +133,4 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun updateDeviceAuthToken(token: String?) {
-        context.userPreferencesDataStore.edit { preferences ->
-            if (token.isNullOrEmpty()) {
-                preferences.remove(UserPreferencesKeys.DEVICE_AUTH_TOKEN)
-            } else {
-                preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN] = token
-            }
-        }
-    }
-
-    suspend fun getDeviceAuthToken(): String? {
-        val preferences = context.userPreferencesDataStore.data.firstOrNull() ?: return null
-        return preferences[UserPreferencesKeys.DEVICE_AUTH_TOKEN]
-    }
 }

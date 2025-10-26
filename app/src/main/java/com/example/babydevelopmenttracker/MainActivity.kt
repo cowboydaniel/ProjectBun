@@ -1616,7 +1616,7 @@ private fun PeerConnectionControls(
             }
         }
 
-        if (connectionState.discoveredEndpoints.isNotEmpty()) {
+        if (discovering || connectionState.discoveredEndpoints.isNotEmpty()) {
             Column(
                 modifier = Modifier.padding(top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1625,7 +1625,7 @@ private fun PeerConnectionControls(
                     text = stringResource(id = R.string.settings_peer_discovered_title),
                     style = MaterialTheme.typography.titleMedium
                 )
-                connectionState.discoveredEndpoints.forEach { endpoint ->
+                if (connectionState.discoveredEndpoints.isEmpty()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.medium,
@@ -1633,20 +1633,36 @@ private fun PeerConnectionControls(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Text(
+                            text = stringResource(id = R.string.settings_peer_discovered_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
+                    }
+                } else {
+                    connectionState.discoveredEndpoints.forEach { endpoint ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            tonalElevation = 1.dp,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ) {
-                            Text(
-                                text = endpoint.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            Button(onClick = { onConnectEndpoint(endpoint.id) }) {
-                                Text(text = stringResource(id = R.string.settings_peer_connect))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = endpoint.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                Button(onClick = { onConnectEndpoint(endpoint.id) }) {
+                                    Text(text = stringResource(id = R.string.settings_peer_connect))
+                                }
                             }
                         }
                     }

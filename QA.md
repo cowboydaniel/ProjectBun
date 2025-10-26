@@ -6,6 +6,8 @@
 - Enable the share toggle and ensure the partner immediately gains access to existing entries and the add-entry button.
 - Create a new journal entry on each device and verify it appears for the other after syncing.
 - Export the journal to PDF from the expectant parent’s device and confirm the generated file contains the latest entries.
+- In Settings, use the developer controls at the bottom to manually start/stop advertising and discovery, confirming that devices disappear and reappear in the “Nearby devices” list accordingly before reconnecting.【F:app/src/main/java/com/example/babydevelopmenttracker/MainActivity.kt†L740-L767】
+- Toggle **Share journal with partner** off and back on to confirm advertising/discovery teardown clears the stored link and forces a fresh registration before the partner regains access.【F:app/src/main/java/com/example/babydevelopmenttracker/MainActivity.kt†L360-L389】
 
 ## Regression smoke tests
 - Run the existing onboarding flow for both roles and confirm Settings toggles behave as expected.

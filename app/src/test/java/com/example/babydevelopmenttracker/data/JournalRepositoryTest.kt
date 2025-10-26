@@ -7,9 +7,10 @@ import com.example.babydevelopmenttracker.data.journal.JournalMood
 import com.example.babydevelopmenttracker.data.journal.JournalRepository
 import com.example.babydevelopmenttracker.network.CreateFamilyRequest
 import com.example.babydevelopmenttracker.network.FamilyRegistrationResponse
-import com.example.babydevelopmenttracker.network.FamilySyncService
+import com.example.babydevelopmenttracker.network.FamilySyncGateway
 import com.example.babydevelopmenttracker.network.JournalEntryPayload
 import com.example.babydevelopmenttracker.network.RegisterFamilyMemberRequest
+import com.example.babydevelopmenttracker.network.PeerConnectionState
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,18 +26,18 @@ class JournalRepositoryTest {
 
     private lateinit var repository: JournalRepository
     private lateinit var fakeDao: FakeJournalDao
-    private lateinit var fakeService: FakeFamilySyncService
+    private lateinit var fakeGateway: FakeFamilySyncGateway
     private val dispatcher = StandardTestDispatcher()
 
     @Before
     fun setup() {
         fakeDao = FakeJournalDao()
-        fakeService = FakeFamilySyncService()
+        fakeGateway = FakeFamilySyncGateway()
         repository = JournalRepository(
             journalDao = fakeDao,
-            familySyncService = fakeService,
+            familySyncGateway = fakeGateway,
             familyIdProvider = { "family-123" },
-            authTokenProvider = { "token-abc" },
+            familySecretProvider = { "token-abc" },
             transactionRunner = { block -> block() },
             ioDispatcher = dispatcher
         )
@@ -51,7 +52,7 @@ class JournalRepositoryTest {
             body = "Shared update",
             attachments = listOf("photo.jpg")
         )
-        fakeService.remoteEntries.add(payload)
+        fakeGateway.remoteEntries.add(payload)
 
         repository.refreshFromRemote()
         advanceUntilIdle()
@@ -78,8 +79,8 @@ class JournalRepositoryTest {
         repository.upsertEntry(entry)
         advanceUntilIdle()
 
-        assertEquals(1, fakeService.remoteEntries.size)
-        val payload = fakeService.remoteEntries.first()
+        assertEquals(1, fakeGateway.remoteEntries.size)
+        val payload = fakeGateway.remoteEntries.first()
         assertEquals(entry.id, payload.id)
         assertEquals(entry.body, payload.body)
         assertEquals(entry.mood.name, payload.mood)
@@ -126,45 +127,59 @@ class JournalRepositoryTest {
         }
     }
 
-    private class FakeFamilySyncService : FamilySyncService {
+    private class FakeFamilySyncGateway : FamilySyncGateway {
         val remoteEntries = mutableListOf<JournalEntryPayload>()
+
+        override val connectionState = MutableStateFlow(PeerConnectionState())
 
         override suspend fun createFamily(
             familyId: String,
             request: CreateFamilyRequest
         ): FamilyRegistrationResponse {
-            throw UnsupportedOperationException("Not implemented in fake")
+            return FamilyRegistrationResponse(request.secret ?: "secret")
         }
 
         override suspend fun registerFamilyMember(
             familyId: String,
             request: RegisterFamilyMemberRequest
         ): FamilyRegistrationResponse {
-            throw UnsupportedOperationException("Not implemented in fake")
+            return FamilyRegistrationResponse("token-abc")
         }
 
         override suspend fun fetchJournalEntries(
             familyId: String,
-            authorization: String,
-        ): List<JournalEntryPayload> =
-            remoteEntries.toList()
+            secret: String,
+        ): List<JournalEntryPayload> = remoteEntries.toList()
 
         override suspend fun upsertJournalEntry(
             familyId: String,
-            entryId: String,
+            secret: String,
             entry: JournalEntryPayload,
-            authorization: String,
         ) {
-            remoteEntries.removeAll { it.id == entryId }
+            remoteEntries.removeAll { it.id == entry.id }
             remoteEntries.add(entry)
         }
 
         override suspend fun deleteJournalEntry(
             familyId: String,
+            secret: String,
             entryId: String,
-            authorization: String,
         ) {
             remoteEntries.removeAll { it.id == entryId }
         }
+
+        override fun startAdvertising(endpointName: String) {}
+
+        override fun stopAdvertising() {}
+
+        override fun startDiscovery(endpointName: String) {}
+
+        override fun stopDiscovery() {}
+
+        override fun connectToEndpoint(endpointId: String) {}
+
+        override fun disconnectEndpoint(endpointId: String) {}
+
+        override fun shutdown() {}
     }
 }

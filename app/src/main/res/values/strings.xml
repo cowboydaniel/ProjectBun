@@ -84,6 +84,16 @@
     <string name="settings_partner_code_prompt">Enter the invite code to sync the due date.</string>
     <string name="settings_due_date_description_partner">Your due date comes from the expectant parent. Re-enter their code if they share an update.</string>
     <string name="settings_due_date_invite_managed">This due date came from an invite code and can’t be edited here.</string>
+    <string name="settings_peer_title">Nearby sync</string>
+    <string name="settings_peer_description">Use a direct device-to-device link to exchange approvals and journal updates even without internet.</string>
+    <string name="settings_peer_broadcast_start">Start broadcasting</string>
+    <string name="settings_peer_broadcast_stop">Stop broadcasting</string>
+    <string name="settings_peer_discover_start">Find nearby devices</string>
+    <string name="settings_peer_discover_stop">Stop scanning</string>
+    <string name="settings_peer_discovered_title">Devices found nearby</string>
+    <string name="settings_peer_connect">Connect</string>
+    <string name="settings_peer_connected_title">Connected devices</string>
+    <string name="settings_peer_disconnect">Disconnect</string>
     <string name="partner_parent_focus_heading">How mom might be feeling</string>
     <string name="partner_parent_focus_summary">Use these cues to check in with her and offer support that feels right.</string>
     <string name="partner_baby_overview_heading">Baby at a glance</string>

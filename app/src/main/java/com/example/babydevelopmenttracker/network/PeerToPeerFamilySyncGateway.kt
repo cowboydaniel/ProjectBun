@@ -48,6 +48,7 @@ class PeerToPeerFamilySyncGateway(
     private val pendingSyncRequests = ConcurrentHashMap<String, CompletableDeferred<List<JournalEntryPayload>>>()
     private val connectedEndpoints = ConcurrentHashMap<String, PeerEndpoint>()
     private val discoveredEndpoints = ConcurrentHashMap<String, PeerEndpoint>()
+    private val pendingConnections = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var isAdvertising = false
     @Volatile private var isDiscovering = false
     private var localEndpointName: String = ""
@@ -201,6 +202,7 @@ class PeerToPeerFamilySyncGateway(
         isDiscovering = true
         localEndpointName = endpointName
         discoveredEndpoints.clear()
+        pendingConnections.clear()
         client.startDiscovery(endpointName)
         publishState()
     }
@@ -208,42 +210,50 @@ class PeerToPeerFamilySyncGateway(
     override fun stopDiscovery() {
         isDiscovering = false
         client.stopDiscovery()
+        pendingConnections.clear()
         publishState()
     }
 
     override fun connectToEndpoint(endpointId: String) {
+        pendingConnections.add(endpointId)
         client.requestConnection(endpointId, localEndpointName)
     }
 
     override fun disconnectEndpoint(endpointId: String) {
         client.disconnectEndpoint(endpointId)
         connectedEndpoints.remove(endpointId)
+        pendingConnections.remove(endpointId)
         publishState()
     }
 
     override fun shutdown() {
         client.stopAll()
+        pendingConnections.clear()
         scope.cancel()
     }
 
     override fun onEndpointFound(endpointId: String, name: String) {
         discoveredEndpoints[endpointId] = PeerEndpoint(endpointId, name)
+        maybeAutoConnect(endpointId)
         publishState()
     }
 
     override fun onEndpointLost(endpointId: String) {
         discoveredEndpoints.remove(endpointId)
+        pendingConnections.remove(endpointId)
         publishState()
     }
 
     override fun onEndpointConnected(endpointId: String, name: String) {
         connectedEndpoints[endpointId] = PeerEndpoint(endpointId, name)
         discoveredEndpoints.remove(endpointId)
+        pendingConnections.remove(endpointId)
         publishState()
     }
 
     override fun onEndpointDisconnected(endpointId: String) {
         connectedEndpoints.remove(endpointId)
+        pendingConnections.remove(endpointId)
         publishState()
     }
 
@@ -411,6 +421,23 @@ class PeerToPeerFamilySyncGateway(
 
     private fun ensureFamilyStore(familyId: String): MutableMap<String, JournalEntryPayload> {
         return journalStore.getOrPut(familyId) { mutableMapOf() }
+    }
+
+    private fun shouldAutoConnect(): Boolean {
+        return membership.values.any { !it.isHost }
+    }
+
+    private fun maybeAutoConnect(endpointId: String) {
+        if (!shouldAutoConnect()) {
+            return
+        }
+        if (connectedEndpoints.containsKey(endpointId)) {
+            return
+        }
+        val shouldRequest = pendingConnections.add(endpointId)
+        if (shouldRequest) {
+            client.requestConnection(endpointId, localEndpointName)
+        }
     }
 
     private fun publishState() {

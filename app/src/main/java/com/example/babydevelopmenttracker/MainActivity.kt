@@ -2,8 +2,15 @@ package com.example.babydevelopmenttracker
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -36,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -89,6 +97,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -97,6 +106,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import com.example.babydevelopmenttracker.data.FamilyRole
 import com.example.babydevelopmenttracker.data.PartnerInviteCode
 import com.example.babydevelopmenttracker.data.UserPreferences
@@ -131,6 +141,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.firstOrNull
 import androidx.room.withTransaction
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -299,6 +311,20 @@ fun BabyDevelopmentTrackerScreen(
             deniedAction?.invoke()
         }
     }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var nearbyRadioStatus by remember(context) { mutableStateOf(checkNearbyRadios(context)) }
+    var pendingRadioRequest by remember { mutableStateOf<PendingRadioRequest?>(null) }
+    val bluetoothEnableLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        val status = checkNearbyRadios(context)
+        nearbyRadioStatus = status
+        if (status.allEnabled) {
+            val request = pendingRadioRequest
+            pendingRadioRequest = null
+            request?.onSuccess?.invoke()
+        }
+    }
     val ensureNearbyPermissions: (onGranted: () -> Unit, onDenied: () -> Unit) -> Unit = remember(nearbyPermissions, context) {
         { onGranted, onDenied ->
             if (hasAllPermissions(context, nearbyPermissions)) {
@@ -315,6 +341,47 @@ fun BabyDevelopmentTrackerScreen(
                 }
             }
         }
+    }
+    val ensureNearbyRadios: (onSuccess: () -> Unit, onDecline: () -> Unit) -> Unit = remember(context) {
+        { onSuccess, onDecline ->
+            val status = checkNearbyRadios(context)
+            nearbyRadioStatus = status
+            if (status.allEnabled) {
+                onSuccess()
+            } else {
+                pendingRadioRequest = PendingRadioRequest(onSuccess, onDecline)
+            }
+        }
+    }
+    val ensureNearbyReady: (onReady: () -> Unit, onDecline: () -> Unit) -> Unit = remember(ensureNearbyPermissions, ensureNearbyRadios) {
+        { onReady, onDecline ->
+            ensureNearbyPermissions(
+                onGranted = { ensureNearbyRadios(onReady, onDecline) },
+                onDenied = onDecline
+            )
+        }
+    }
+    LaunchedEffect(pendingRadioRequest) {
+        if (pendingRadioRequest != null && !nearbyRadioStatus.allEnabled) {
+            snackbarHostState.showSnackbar(
+                context.getString(R.string.peer_radio_required_snackbar)
+            )
+        }
+    }
+    DisposableEffect(lifecycleOwner, pendingRadioRequest) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingRadioRequest != null) {
+                val status = checkNearbyRadios(context)
+                nearbyRadioStatus = status
+                if (status.allEnabled) {
+                    val request = pendingRadioRequest
+                    pendingRadioRequest = null
+                    request?.onSuccess?.invoke()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(inviteCode) {
@@ -333,7 +400,10 @@ fun BabyDevelopmentTrackerScreen(
 
     LaunchedEffect(onboardingCompleted, familyRole, nearbyPermissionsGranted) {
         if (!onboardingCompleted && familyRole == FamilyRole.PARTNER_SUPPORTER && nearbyPermissionsGranted) {
-            familySyncGateway.startAdvertising(deviceEndpointName)
+            ensureNearbyRadios(
+                onSuccess = { familySyncGateway.startAdvertising(deviceEndpointName) },
+                onDecline = {}
+            )
         }
     }
 
@@ -359,7 +429,10 @@ fun BabyDevelopmentTrackerScreen(
             }
             userPreferencesRepository.updatePartnerLinkApproved(true)
             familySyncGateway.stopAdvertising()
-            familySyncGateway.startDiscovery(deviceEndpointName)
+            ensureNearbyRadios(
+                onSuccess = { familySyncGateway.startDiscovery(deviceEndpointName) },
+                onDecline = { familySyncGateway.stopDiscovery() }
+            )
             PartnerInviteOutcome.Success(epochDay)
         } catch (error: Exception) {
             Log.e(FAMILY_SYNC_TAG, "Failed to register family member", error)
@@ -407,12 +480,11 @@ fun BabyDevelopmentTrackerScreen(
                                     isPartnerLinking = false
                                 }
                             }
-                            Unit
                         }
-                        val handlePermissionDenied = {
+                        val handlePrerequisiteDenied = {
                             partnerLinkError = context.getString(R.string.settings_peer_permission_required)
                         }
-                        ensureNearbyPermissions(startLinking, handlePermissionDenied)
+                        ensureNearbyReady(startLinking, handlePrerequisiteDenied)
                     }
                 }
             } else {
@@ -477,7 +549,7 @@ fun BabyDevelopmentTrackerScreen(
                         partnerCodeError =
                             context.getString(R.string.settings_peer_permission_required)
                     }
-                    ensureNearbyPermissions(beginRegistration, handlePermissionDenied)
+                    ensureNearbyReady(beginRegistration, handlePermissionDenied)
                 }
             }
         }
@@ -567,6 +639,85 @@ fun BabyDevelopmentTrackerScreen(
         Unit
     }
 
+    if (pendingRadioRequest != null && !nearbyRadioStatus.allEnabled) {
+        val missingRadios = nearbyRadioStatus.missingRadios
+        val missingNames = missingRadios.map { radio ->
+            when (radio) {
+                RadioType.BLUETOOTH -> stringResource(id = R.string.peer_radio_name_bluetooth)
+                RadioType.WIFI -> stringResource(id = R.string.peer_radio_name_wifi)
+                RadioType.LOCATION -> stringResource(id = R.string.peer_radio_name_location)
+            }
+        }
+        val missingSummary = missingNames.joinToString()
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(text = stringResource(id = R.string.peer_radio_required_title))
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = stringResource(
+                            id = R.string.peer_radio_required_detail,
+                            missingSummary
+                        )
+                    )
+                    if (RadioType.BLUETOOTH in missingRadios) {
+                        Button(
+                            onClick = {
+                                bluetoothEnableLauncher.launch(
+                                    Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(text = stringResource(id = R.string.peer_radio_required_bluetooth))
+                        }
+                    }
+                    if (RadioType.WIFI in missingRadios) {
+                        Button(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(text = stringResource(id = R.string.peer_radio_required_wifi))
+                        }
+                    }
+                    if (RadioType.LOCATION in missingRadios) {
+                        Button(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(text = stringResource(id = R.string.peer_radio_required_location))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val request = pendingRadioRequest
+                        pendingRadioRequest = null
+                        request?.onDecline?.invoke()
+                    }
+                ) {
+                    Text(text = stringResource(id = R.string.peer_radio_required_cancel))
+                }
+            }
+        )
+    }
+
     if (!onboardingCompleted) {
         OnboardingFlow(
             familyRole = familyRole,
@@ -601,7 +752,7 @@ fun BabyDevelopmentTrackerScreen(
             showPermissionRationale = showPermissionRationale,
             nearbyPermissionsGranted = nearbyPermissionsGranted,
             onRequestNearbyPermissions = { onResult ->
-                ensureNearbyPermissions(
+                ensureNearbyReady(
                     {
                         familySyncGateway.startAdvertising(deviceEndpointName)
                         onResult(true)
@@ -849,7 +1000,7 @@ fun BabyDevelopmentTrackerScreen(
                         dueDateFromPartnerInvite = dueDateFromPartnerInvite,
                         connectionState = connectionState,
                         onStartAdvertising = {
-                            ensureNearbyPermissions(
+                            ensureNearbyReady(
                                 {
                                     familySyncGateway.startAdvertising(deviceEndpointName)
                                 },
@@ -864,7 +1015,7 @@ fun BabyDevelopmentTrackerScreen(
                         },
                         onStopAdvertising = { familySyncGateway.stopAdvertising() },
                         onStartDiscovery = {
-                            ensureNearbyPermissions(
+                            ensureNearbyReady(
                                 {
                                     familySyncGateway.startDiscovery(deviceEndpointName)
                                 },
@@ -2431,6 +2582,55 @@ private fun hasAllPermissions(context: Context, permissions: Array<String>): Boo
     return permissions.all { permission ->
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
     }
+}
+
+private data class PendingRadioRequest(
+    val onSuccess: () -> Unit,
+    val onDecline: () -> Unit,
+)
+
+private data class NearbyRadioStatus(
+    val bluetoothEnabled: Boolean,
+    val wifiEnabled: Boolean,
+    val locationEnabled: Boolean,
+) {
+    val allEnabled: Boolean
+        get() = bluetoothEnabled && wifiEnabled && locationEnabled
+
+    val missingRadios: List<RadioType>
+        get() = buildList {
+            if (!bluetoothEnabled) add(RadioType.BLUETOOTH)
+            if (!wifiEnabled) add(RadioType.WIFI)
+            if (!locationEnabled) add(RadioType.LOCATION)
+        }
+}
+
+private enum class RadioType { BLUETOOTH, WIFI, LOCATION }
+
+private fun checkNearbyRadios(context: Context): NearbyRadioStatus {
+    val bluetoothManager = context.getSystemService(BluetoothManager::class.java)
+    val bluetoothEnabled = bluetoothManager?.adapter?.isEnabled == true
+
+    val wifiManager = context.applicationContext.getSystemService(WifiManager::class.java)
+    val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
+    @Suppress("DEPRECATION")
+    val wifiManagerEnabled = wifiManager?.isWifiEnabled == true
+    val wifiTransportEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val capabilities = connectivityManager?.getNetworkCapabilities(connectivityManager.activeNetwork)
+        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    } else {
+        false
+    }
+    val wifiEnabled = wifiManagerEnabled || wifiTransportEnabled
+
+    val locationManager = context.getSystemService(LocationManager::class.java)
+    val locationEnabled = locationManager?.let { LocationManagerCompat.isLocationEnabled(it) } == true
+
+    return NearbyRadioStatus(
+        bluetoothEnabled = bluetoothEnabled,
+        wifiEnabled = wifiEnabled,
+        locationEnabled = locationEnabled,
+    )
 }
 
 @Composable

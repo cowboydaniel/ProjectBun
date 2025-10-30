@@ -417,8 +417,8 @@ fun BabyDevelopmentTrackerScreen(
     LaunchedEffect(onboardingCompleted, familyRole, nearbyPermissionsGranted) {
         if (!onboardingCompleted && familyRole == FamilyRole.PARTNER_SUPPORTER && nearbyPermissionsGranted) {
             ensureNearbyRadios(
-                onSuccess = { familySyncGateway.startAdvertising(deviceEndpointName) },
-                onDecline = {}
+                { familySyncGateway.startAdvertising(deviceEndpointName) },
+                {}
             )
         }
     }
@@ -446,8 +446,8 @@ fun BabyDevelopmentTrackerScreen(
             userPreferencesRepository.updatePartnerLinkApproved(true)
             familySyncGateway.stopAdvertising()
             ensureNearbyRadios(
-                onSuccess = { familySyncGateway.startDiscovery(deviceEndpointName) },
-                onDecline = { familySyncGateway.stopDiscovery() }
+                { familySyncGateway.startDiscovery(deviceEndpointName) },
+                { familySyncGateway.stopDiscovery() }
             )
             PartnerInviteOutcome.Success(epochDay)
         } catch (error: Exception) {
@@ -2604,6 +2604,33 @@ private data class PendingRadioRequest(
     val onSuccess: () -> Unit,
     val onDecline: () -> Unit,
 )
+
+private class NearbyPermissionAction(
+    private val delegate: (onGranted: () -> Unit, onDenied: () -> Unit) -> Unit,
+) {
+    operator fun invoke(
+        onGranted: () -> Unit,
+        onDenied: () -> Unit,
+    ) = delegate(onGranted, onDenied)
+}
+
+private class NearbyRadioAction(
+    private val delegate: (onSuccess: () -> Unit, onDecline: () -> Unit) -> Unit,
+) {
+    operator fun invoke(
+        onSuccess: () -> Unit,
+        onDecline: () -> Unit,
+    ) = delegate(onSuccess, onDecline)
+}
+
+private class NearbyReadyAction(
+    private val delegate: (onReady: () -> Unit, onDecline: () -> Unit) -> Unit,
+) {
+    operator fun invoke(
+        onReady: () -> Unit,
+        onDecline: () -> Unit,
+    ) = delegate(onReady, onDecline)
+}
 
 private data class NearbyRadioStatus(
     val bluetoothEnabled: Boolean,

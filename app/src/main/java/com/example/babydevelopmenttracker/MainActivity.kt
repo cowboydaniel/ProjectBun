@@ -2657,7 +2657,9 @@ private fun checkNearbyRadios(context: Context): NearbyRadioStatus {
     val wifiManager = context.applicationContext.getSystemService(WifiManager::class.java)
     val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
     @Suppress("DEPRECATION")
-    val wifiManagerEnabled = wifiManager?.isWifiEnabled == true
+    val wifiManagerEnabled = runCatching {
+        wifiManager?.isWifiEnabled == true
+    }.getOrElse { false }
     val wifiTransportEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val capabilities = connectivityManager?.getNetworkCapabilities(connectivityManager.activeNetwork)
         capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true

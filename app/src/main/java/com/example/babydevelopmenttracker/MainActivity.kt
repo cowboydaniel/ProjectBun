@@ -325,8 +325,8 @@ fun BabyDevelopmentTrackerScreen(
             request?.onSuccess?.invoke()
         }
     }
-    val ensureNearbyPermissions: (onGranted: () -> Unit, onDenied: () -> Unit) -> Unit = remember(nearbyPermissions, context) {
-        { onGranted, onDenied ->
+    val ensureNearbyPermissionsDelegate = remember(nearbyPermissions, context) {
+        { onGranted: () -> Unit, onDenied: () -> Unit ->
             if (hasAllPermissions(context, nearbyPermissions)) {
                 nearbyPermissionsGranted = true
                 onGranted()
@@ -342,8 +342,13 @@ fun BabyDevelopmentTrackerScreen(
             }
         }
     }
-    val ensureNearbyRadios: (onSuccess: () -> Unit, onDecline: () -> Unit) -> Unit = remember(context) {
-        { onSuccess, onDecline ->
+    fun ensureNearbyPermissions(
+        onGranted: () -> Unit,
+        onDenied: () -> Unit,
+    ) = ensureNearbyPermissionsDelegate(onGranted, onDenied)
+
+    val ensureNearbyRadiosDelegate = remember(context) {
+        { onSuccess: () -> Unit, onDecline: () -> Unit ->
             val status = checkNearbyRadios(context)
             nearbyRadioStatus = status
             if (status.allEnabled) {
@@ -353,14 +358,25 @@ fun BabyDevelopmentTrackerScreen(
             }
         }
     }
-    val ensureNearbyReady: (onReady: () -> Unit, onDecline: () -> Unit) -> Unit = remember(ensureNearbyPermissions, ensureNearbyRadios) {
-        { onReady, onDecline ->
+    fun ensureNearbyRadios(
+        onSuccess: () -> Unit,
+        onDecline: () -> Unit,
+    ) = ensureNearbyRadiosDelegate(onSuccess, onDecline)
+
+    val ensureNearbyReadyDelegate = remember(ensureNearbyPermissionsDelegate, ensureNearbyRadiosDelegate) {
+        { onReady: () -> Unit, onDecline: () -> Unit ->
             ensureNearbyPermissions(
-                onGranted = { ensureNearbyRadios(onReady, onDecline) },
+                onGranted = {
+                    ensureNearbyRadios(onSuccess = onReady, onDecline = onDecline)
+                },
                 onDenied = onDecline
             )
         }
     }
+    fun ensureNearbyReady(
+        onReady: () -> Unit,
+        onDecline: () -> Unit,
+    ) = ensureNearbyReadyDelegate(onReady, onDecline)
     LaunchedEffect(pendingRadioRequest) {
         if (pendingRadioRequest != null && !nearbyRadioStatus.allEnabled) {
             snackbarHostState.showSnackbar(

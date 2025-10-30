@@ -356,8 +356,8 @@ fun BabyDevelopmentTrackerScreen(
     val ensureNearbyReady = remember(ensureNearbyPermissions, ensureNearbyRadios) {
         NearbyReadyAction { onReady, onDecline ->
             ensureNearbyPermissions(
-                onGranted = { ensureNearbyRadios(onSuccess = onReady, onDecline = onDecline) },
-                onDenied = onDecline
+                { ensureNearbyRadios(onReady, onDecline) },
+                onDecline
             )
         }
     }
@@ -401,8 +401,8 @@ fun BabyDevelopmentTrackerScreen(
     LaunchedEffect(onboardingCompleted, familyRole, nearbyPermissionsGranted) {
         if (!onboardingCompleted && familyRole == FamilyRole.PARTNER_SUPPORTER && nearbyPermissionsGranted) {
             ensureNearbyRadios(
-                onSuccess = { familySyncGateway.startAdvertising(deviceEndpointName) },
-                onDecline = {}
+                { familySyncGateway.startAdvertising(deviceEndpointName) },
+                {}
             )
         }
     }
@@ -430,8 +430,8 @@ fun BabyDevelopmentTrackerScreen(
             userPreferencesRepository.updatePartnerLinkApproved(true)
             familySyncGateway.stopAdvertising()
             ensureNearbyRadios(
-                onSuccess = { familySyncGateway.startDiscovery(deviceEndpointName) },
-                onDecline = { familySyncGateway.stopDiscovery() }
+                { familySyncGateway.startDiscovery(deviceEndpointName) },
+                { familySyncGateway.stopDiscovery() }
             )
             PartnerInviteOutcome.Success(epochDay)
         } catch (error: Exception) {

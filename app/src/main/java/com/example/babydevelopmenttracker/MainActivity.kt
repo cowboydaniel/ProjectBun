@@ -325,8 +325,8 @@ fun BabyDevelopmentTrackerScreen(
             request?.onSuccess?.invoke()
         }
     }
-    val ensureNearbyPermissions: (onGranted: () -> Unit, onDenied: () -> Unit) -> Unit = remember(nearbyPermissions, context) {
-        { onGranted, onDenied ->
+    val ensureNearbyPermissions = remember(nearbyPermissions, context) {
+        NearbyPermissionAction { onGranted, onDenied ->
             if (hasAllPermissions(context, nearbyPermissions)) {
                 nearbyPermissionsGranted = true
                 onGranted()
@@ -342,8 +342,8 @@ fun BabyDevelopmentTrackerScreen(
             }
         }
     }
-    val ensureNearbyRadios: (onSuccess: () -> Unit, onDecline: () -> Unit) -> Unit = remember(context) {
-        { onSuccess, onDecline ->
+    val ensureNearbyRadios = remember(context) {
+        NearbyRadioAction { onSuccess, onDecline ->
             val status = checkNearbyRadios(context)
             nearbyRadioStatus = status
             if (status.allEnabled) {
@@ -353,10 +353,10 @@ fun BabyDevelopmentTrackerScreen(
             }
         }
     }
-    val ensureNearbyReady: (onReady: () -> Unit, onDecline: () -> Unit) -> Unit = remember(ensureNearbyPermissions, ensureNearbyRadios) {
-        { onReady, onDecline ->
+    val ensureNearbyReady = remember(ensureNearbyPermissions, ensureNearbyRadios) {
+        NearbyReadyAction { onReady, onDecline ->
             ensureNearbyPermissions(
-                onGranted = { ensureNearbyRadios(onReady, onDecline) },
+                onGranted = { ensureNearbyRadios(onSuccess = onReady, onDecline = onDecline) },
                 onDenied = onDecline
             )
         }
@@ -2588,6 +2588,33 @@ private data class PendingRadioRequest(
     val onSuccess: () -> Unit,
     val onDecline: () -> Unit,
 )
+
+private class NearbyPermissionAction(
+    private val delegate: (onGranted: () -> Unit, onDenied: () -> Unit) -> Unit,
+) {
+    operator fun invoke(
+        onGranted: () -> Unit,
+        onDenied: () -> Unit,
+    ) = delegate(onGranted, onDenied)
+}
+
+private class NearbyRadioAction(
+    private val delegate: (onSuccess: () -> Unit, onDecline: () -> Unit) -> Unit,
+) {
+    operator fun invoke(
+        onSuccess: () -> Unit,
+        onDecline: () -> Unit,
+    ) = delegate(onSuccess, onDecline)
+}
+
+private class NearbyReadyAction(
+    private val delegate: (onReady: () -> Unit, onDecline: () -> Unit) -> Unit,
+) {
+    operator fun invoke(
+        onReady: () -> Unit,
+        onDecline: () -> Unit,
+    ) = delegate(onReady, onDecline)
+}
 
 private data class NearbyRadioStatus(
     val bluetoothEnabled: Boolean,

@@ -248,7 +248,7 @@ fun BabyDevelopmentTrackerScreen(
     val scope = rememberCoroutineScope()
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
-    var selectedWeek by remember { mutableStateOf(20) }
+    var selectedWeek by remember { mutableStateOf(4) }
     val dueDateEpochDay = userPreferences.dueDateEpochDay
     val remindersEnabled = userPreferences.remindersEnabled
     val familyRole = userPreferences.familyRole

@@ -248,7 +248,6 @@ fun BabyDevelopmentTrackerScreen(
     val scope = rememberCoroutineScope()
     val zoneId = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zoneId) }
-    var selectedWeek by remember { mutableStateOf(4) }
     val dueDateEpochDay = userPreferences.dueDateEpochDay
     val remindersEnabled = userPreferences.remindersEnabled
     val familyRole = userPreferences.familyRole
@@ -258,6 +257,7 @@ fun BabyDevelopmentTrackerScreen(
     val partnerLinkApproved = userPreferences.partnerLinkApproved
     val shareJournalWithPartner = userPreferences.shareJournalWithPartner
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
+    var selectedWeek by remember { mutableStateOf(dueDate?.let { calculateWeekFromDueDate(it, today) } ?: 4) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }

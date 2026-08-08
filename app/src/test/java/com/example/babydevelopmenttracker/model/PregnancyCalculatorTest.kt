@@ -1,47 +1,51 @@
 package com.example.babydevelopmenttracker.model
 
 import java.time.LocalDate
-import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import org.junit.Test
 
 class PregnancyCalculatorTest {
 
-    private val today = LocalDate.of(2024, 6, 15)
+    private val dueDate = LocalDate.of(2026, 6, 1)
 
     @Test
-    fun `returns null when calculated week is earlier than supported range`() {
-        val dueDate = today.plusWeeks(36)
-
-        val result = calculateWeekFromDueDate(dueDate, today)
-
-        assertNull(result)
+    fun dueDateItselfIsWeekForty() {
+        assertEquals(40, calculateWeekFromDueDate(dueDate, dueDate))
     }
 
     @Test
-    fun `returns week 39 when due date is one week away`() {
-        val dueDate = today.plusWeeks(1)
-
-        val result = calculateWeekFromDueDate(dueDate, today)
-
-        assertEquals(39, result)
+    fun daysPastTheDueDateStayInWeekForty() {
+        // Gestational age counts completed weeks, so 40w1d through 40w6d are all week 40.
+        for (daysOverdue in 1..6) {
+            assertEquals(
+                40,
+                calculateWeekFromDueDate(dueDate, dueDate.plusDays(daysOverdue.toLong())),
+                "expected week 40 at 40w${daysOverdue}d"
+            )
+        }
     }
 
     @Test
-    fun `returns week 40 on the due date`() {
-        val dueDate = today
-
-        val result = calculateWeekFromDueDate(dueDate, today)
-
-        assertEquals(40, result)
+    fun aFullWeekPastTheDueDateIsWeekFortyOne() {
+        assertEquals(41, calculateWeekFromDueDate(dueDate, dueDate.plusDays(7)))
+        assertEquals(41, calculateWeekFromDueDate(dueDate, dueDate.plusDays(13)))
+        assertEquals(42, calculateWeekFromDueDate(dueDate, dueDate.plusDays(14)))
     }
 
     @Test
-    fun `caps at week 42 when pregnancy is overdue`() {
-        val dueDate = today.minusWeeks(3)
+    fun weeksBeforeTheDueDateCountDown() {
+        assertEquals(39, calculateWeekFromDueDate(dueDate, dueDate.minusDays(7)))
+        assertEquals(30, calculateWeekFromDueDate(dueDate, dueDate.minusDays(70)))
+    }
 
-        val result = calculateWeekFromDueDate(dueDate, today)
+    @Test
+    fun beforeWeekFourThereIsNothingToShow() {
+        assertNull(calculateWeekFromDueDate(dueDate, dueDate.minusDays(260)))
+    }
 
-        assertEquals(42, result)
+    @Test
+    fun weeksBeyondTheDataSetClampToTheLast() {
+        assertEquals(42, calculateWeekFromDueDate(dueDate, dueDate.plusDays(60)))
     }
 }

@@ -51,8 +51,8 @@
     <string name="notification_body_generic">Open the app to explore the latest week-by-week guidance.</string>
     <string name="notification_body_partner_tip">This week’s support idea: %1$s</string>
     <string name="growth_trends_heading">Growth trends</string>
-    <string name="growth_trends_overview">Visualize how baby’s size evolves each week.</string>
-    <string name="growth_trends_length">Estimated length: %1$.1f cm</string>
+    <string name="growth_trends_overview">Visualize how baby’s size evolves each week. Lengths are measured crown to rump, as on an ultrasound, so they read shorter than a newborn’s head-to-heel length.</string>
+    <string name="growth_trends_length">Estimated crown-to-rump length: %1$.1f cm</string>
     <string name="growth_trends_weight">Estimated weight: %1$,d g</string>
     <string name="home_greeting">Hello, %1$s!</string>
     <string name="settings_family_role_title">Family role</string>

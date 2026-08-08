@@ -202,7 +202,7 @@ object BabyDevelopmentRepository {
             week = 15,
             babyHighlights = listOf(
                 "Bones harden and become visible on ultrasound.",
-                "Baby can sense light filtering through closed eyelids."
+                "Eyelids stay fused shut, shielding the developing retinas underneath."
             ),
             parentChanges = listOf(
                 "Increased blood volume can cause stuffy noses or bleeding gums.",
@@ -217,7 +217,7 @@ object BabyDevelopmentRepository {
         BabyDevelopmentWeek(
             week = 16,
             babyHighlights = listOf(
-                "The heart pumps around 25 quarts of blood every day.",
+                "The heart pumps around 24 litres of blood every day.",
                 "Muscles strengthen in preparation for the first detectable kicks."
             ),
             parentChanges = listOf(
@@ -441,7 +441,7 @@ object BabyDevelopmentRepository {
         BabyDevelopmentWeek(
             week = 30,
             babyHighlights = listOf(
-                "Bone marrow takes over red blood cell production full-time.",
+                "Bone marrow becomes the main site of red blood cell production.",
                 "Lanugo starts thinning as baby accumulates insulating fat."
             ),
             parentChanges = listOf(
@@ -473,7 +473,7 @@ object BabyDevelopmentRepository {
         BabyDevelopmentWeek(
             week = 32,
             babyHighlights = listOf(
-                "Baby gains roughly half a pound per week and practices breathing.",
+                "Baby gains roughly 225 grams per week and practices breathing.",
                 "Finger and toenails reach the tips of tiny digits."
             ),
             parentChanges = listOf(
@@ -505,7 +505,7 @@ object BabyDevelopmentRepository {
         BabyDevelopmentWeek(
             week = 34,
             babyHighlights = listOf(
-                "Lungs reach maturity milestones to support breathing after birth.",
+                "Lungs keep building surfactant, though they are not yet fully mature.",
                 "The central nervous system fine-tunes and pupils react to light."
             ),
             parentChanges = listOf(
@@ -521,7 +521,7 @@ object BabyDevelopmentRepository {
         BabyDevelopmentWeek(
             week = 35,
             babyHighlights = listOf(
-                "Kidneys fully function and the liver processes waste efficiently.",
+                "Kidneys keep producing urine while the liver processes waste more efficiently.",
                 "Limbs plump with soft fat to regulate temperature after birth."
             ),
             parentChanges = listOf(
@@ -554,7 +554,7 @@ object BabyDevelopmentRepository {
             week = 37,
             babyHighlights = listOf(
                 "Baby reaches early-term status with lungs and brain completing key milestones.",
-                "Weight gain continues at roughly an ounce per day."
+                "Weight gain continues at roughly 30 grams per day."
             ),
             parentChanges = listOf(
                 "Pelvic pressure intensifies and irregular contractions are common.",

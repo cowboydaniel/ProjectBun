@@ -2739,8 +2739,13 @@ private fun CompanionModeBanner(
 @Composable
 fun GrowthTrendCard(selectedWeek: Int) {
     val growthPoints = remember { FetalGrowthTrends.weeklyGrowth }
+    // The chart marker has to sit on a sampled point, so it snaps to the nearest one. The figures
+    // below it are interpolated instead, so they describe the week actually selected.
     val highlightPoint = remember(selectedWeek) {
         FetalGrowthTrends.findClosestWeek(selectedWeek)
+    }
+    val estimatedPoint = remember(selectedWeek) {
+        FetalGrowthTrends.estimateForWeek(selectedWeek)
     }
 
     Card(
@@ -2763,7 +2768,7 @@ fun GrowthTrendCard(selectedWeek: Int) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             GrowthTrendChart(points = growthPoints, highlightPoint = highlightPoint)
-            highlightPoint?.let { point ->
+            estimatedPoint?.let { point ->
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = stringResource(id = R.string.week_selector_label, point.week),

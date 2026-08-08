@@ -28,8 +28,11 @@ fun calculateWeekFromDueDate(
         val weeksRemaining = ceil(daysUntilDue.toDouble() / DAYS_IN_WEEK)
         TOTAL_WEEKS - weeksRemaining.toInt()
     } else {
-        val overdueWeeks = ceil(abs(daysUntilDue).toDouble() / DAYS_IN_WEEK)
-        TOTAL_WEEKS + overdueWeeks.toInt()
+        // Gestational age counts completed weeks, so being one day past the due date is still
+        // 40w1d - week 40, not week 41. Rounding up here advanced the week a day after the due
+        // date and again every seventh day after that.
+        val overdueWeeks = abs(daysUntilDue) / DAYS_IN_WEEK
+        TOTAL_WEEKS + overdueWeeks
     }
 
     if (computedWeek < MIN_WEEK) {

@@ -785,6 +785,7 @@ fun BabyDevelopmentTrackerScreen(
                 )
             },
             isPartnerAdvertising = connectionState.advertising,
+            nearbyError = connectionState.lastError,
             deviceEndpointName = deviceEndpointName
         )
     } else {
@@ -2062,6 +2063,7 @@ private fun OnboardingFlow(
     nearbyPermissionsGranted: Boolean,
     onRequestNearbyPermissions: (onResult: (Boolean) -> Unit) -> Unit,
     isPartnerAdvertising: Boolean,
+    nearbyError: String?,
     deviceEndpointName: String,
     modifier: Modifier = Modifier,
 ) {
@@ -2229,6 +2231,23 @@ private fun OnboardingFlow(
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = 12.dp)
                             )
+                            // Nearby can refuse to start for reasons the permission grant does not
+                            // cover, most often Location being switched off system wide. Say so
+                            // rather than sitting on "getting ready" indefinitely.
+                            nearbyError?.let { error ->
+                                Text(
+                                    text = stringResource(id = R.string.nearby_failure, error),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
+                                Text(
+                                    text = stringResource(id = R.string.nearby_failure_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
                         } else if (permissionRequestAttempted) {
                             Text(
                                 text = stringResource(id = R.string.onboarding_partner_permissions_error),

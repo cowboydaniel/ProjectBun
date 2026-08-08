@@ -137,6 +137,8 @@
     <string name="onboarding_partner_permissions_button">Allow device permissions</string>
     <string name="onboarding_partner_permissions_preparing">Permissions enabled. Getting &quot;%1$s&quot; ready to be found…</string>
     <string name="onboarding_partner_permissions_success">Permissions enabled. Ask the expectant parent to scan for &quot;%1$s&quot;.</string>
+    <string name="nearby_failure">Nearby connection problem: %1$s</string>
+    <string name="nearby_failure_hint">Check that Location is switched on in system settings, then try again.</string>
     <string name="onboarding_partner_permissions_error">We need nearby device access to continue. Grant the permission to move on.</string>
     <string name="journal_title">Pregnancy journal</string>
     <string name="journal_export_action">Export to PDF</string>

@@ -65,7 +65,14 @@ class JournalPdfExporter(
                     cursorY = verticalPadding
                 }
 
-                val timestampText = dateFormatter.format(entry.timestamp)
+                // Private entries are exported, since this is the author's own copy of her
+                // journal, but they are labelled: a PDF is easy to pass on, and an entry she
+                // chose not to share with her partner should not travel unannounced.
+                val timestampText = if (entry.isPrivate) {
+                    "${dateFormatter.format(entry.timestamp)}  (private)"
+                } else {
+                    dateFormatter.format(entry.timestamp)
+                }
                 canvas.drawText(timestampText, horizontalPadding, cursorY, headerPaint)
                 cursorY += 20f
 

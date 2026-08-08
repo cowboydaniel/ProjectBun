@@ -2,6 +2,11 @@
 .idea/
 .gradle/
 local.properties
+
+# Release signing credentials - never commit these
+keystore.properties
+*.jks
+*.keystore
 .DS_Store
 /build/
 app/build/

@@ -258,6 +258,8 @@ fun BabyDevelopmentTrackerScreen(
     val dueDateFromPartnerInvite = userPreferences.dueDateFromPartnerInvite
     val partnerLinkApproved = userPreferences.partnerLinkApproved
     val shareJournalWithPartner = userPreferences.shareJournalWithPartner
+    val familyLinkId = userPreferences.familyLinkId
+    val familyLinkSecret = userPreferences.familyLinkSecret
     val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
     var selectedWeek by remember { mutableStateOf(dueDate?.let { calculateWeekFromDueDate(it, today) } ?: 4) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -413,6 +415,28 @@ fun BabyDevelopmentTrackerScreen(
     LaunchedEffect(canPartnerViewJournal, familyRole) {
         if (familyRole == FamilyRole.PARTNER_SUPPORTER && !canPartnerViewJournal) {
             journalDestination = JournalDestination.List
+        }
+    }
+
+    // The gateway keeps family membership in memory only, while the link itself is persisted.
+    // Restarting the app therefore left a host advertising with no family registered, so every
+    // registration request from a partner was ignored as belonging to someone else. Re-register
+    // the family on start up so the host can answer again.
+    LaunchedEffect(partnerLinkApproved, familyLinkId, familyLinkSecret, familyRole) {
+        if (
+            partnerLinkApproved &&
+            familyRole != FamilyRole.PARTNER_SUPPORTER &&
+            familyLinkId != null &&
+            familyLinkSecret != null
+        ) {
+            runCatching {
+                familySyncGateway.createFamily(
+                    familyLinkId,
+                    CreateFamilyRequest(secret = familyLinkSecret)
+                )
+            }.onFailure { error ->
+                Log.e(FAMILY_SYNC_TAG, "Failed to restore family link", error)
+            }
         }
     }
 

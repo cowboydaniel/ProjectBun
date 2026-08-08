@@ -317,7 +317,21 @@ class PeerToPeerFamilySyncGateway(
     private suspend fun handleRegisterRequest(endpointId: String, message: PeerMessage) {
         val hostMembership = membership[message.familyId]
         if (hostMembership?.isHost != true) {
-            Log.w(TAG, "Ignoring register request for ${message.familyId} - not host")
+            Log.w(
+                TAG,
+                "Rejecting register request for ${message.familyId} - not host. " +
+                    "Known families: ${membership.keys.joinToString().ifEmpty { "none" }}"
+            )
+            // Answer instead of dropping the message, so the joining device reports the refusal
+            // straight away rather than waiting out the registration timeout with a generic error.
+            sendToEndpoint(
+                endpointId,
+                PeerMessage(
+                    type = PeerMessage.Type.REGISTER_RESPONSE,
+                    familyId = message.familyId,
+                    rejected = true,
+                )
+            )
             return
         }
         val response = PeerMessage(
@@ -329,6 +343,12 @@ class PeerToPeerFamilySyncGateway(
     }
 
     private fun handleRegisterResponse(message: PeerMessage) {
+        if (message.rejected) {
+            pendingRegistrations.remove(message.familyId)?.completeExceptionally(
+                IllegalStateException("Host does not recognise this invite code")
+            )
+            return
+        }
         val secret = message.secret ?: return
         pendingRegistrations.remove(message.familyId)?.complete(
             FamilyRegistrationResponse(secret)
@@ -524,6 +544,7 @@ class PeerToPeerFamilySyncGateway(
         val familyId: String,
         val secret: String? = null,
         val inviteCode: String? = null,
+        val rejected: Boolean = false,
         val deviceIdentifier: String? = null,
         val entry: JournalEntryPayload? = null,
         val entryId: String? = null,

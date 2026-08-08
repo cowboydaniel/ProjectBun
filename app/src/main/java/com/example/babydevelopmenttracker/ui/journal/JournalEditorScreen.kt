@@ -21,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,6 +57,9 @@ fun JournalEditorScreen(
     zoneId: ZoneId = ZoneId.systemDefault(),
 ) {
     val formatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a", Locale.getDefault()) }
+    var isPrivate by rememberSaveable(initialEntry?.id) {
+        mutableStateOf(initialEntry?.isPrivate ?: false)
+    }
     val existingId = initialEntry?.id
     val existingTimestamp = initialEntry?.timestamp ?: Instant.now()
     var mood by rememberSaveable { mutableStateOf(initialEntry?.mood ?: JournalMood.CALM) }
@@ -132,6 +136,31 @@ fun JournalEditorScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(id = R.string.journal_private_label),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    text = stringResource(id = R.string.journal_private_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isPrivate,
+                onCheckedChange = { isPrivate = it },
+                enabled = !isSaving
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Button(
                 onClick = {
                     val attachments = attachmentsInput.split(',')
@@ -142,7 +171,8 @@ fun JournalEditorScreen(
                         timestamp = existingTimestamp,
                         mood = mood,
                         body = body,
-                        attachments = attachments
+                        attachments = attachments,
+                        isPrivate = isPrivate
                     )
                     onSave(entry)
                 },

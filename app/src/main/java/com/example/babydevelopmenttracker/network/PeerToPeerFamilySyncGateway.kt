@@ -405,31 +405,15 @@ class PeerToPeerFamilySyncGateway(
         pendingSyncRequests.remove(message.familyId)?.complete(entries)
     }
 
-    private suspend fun handleUpsertRequest(endpointId: String, message: PeerMessage) {
-        val hostMembership = membership[message.familyId]
-        if (hostMembership?.isHost != true) {
-            Log.w(TAG, "Ignoring upsert request for ${message.familyId} - not host")
-            return
-        }
-        if (hostMembership.secret != message.secret) {
-            Log.w(TAG, "Rejecting upsert request: secret mismatch")
-            return
-        }
-        val entry = message.entry ?: return
-        replaceEntry(message.familyId, entry)
-        broadcast(
-            PeerMessage(
-                type = PeerMessage.Type.UPSERT_BROADCAST,
-                familyId = message.familyId,
-                entry = entry,
-            ),
-            excludeEndpoint = endpointId,
-        )
-        sendToEndpoint(endpointId, PeerMessage(
-            type = PeerMessage.Type.UPSERT_BROADCAST,
-            familyId = message.familyId,
-            entry = entry,
-        ))
+    /**
+     * Rejects journal writes arriving from another device.
+     *
+     * The journal belongs to the expectant parent and partners read it, so the host is the only
+     * writer. Enforcing that here as well as in the UI means an older or modified build on the
+     * partner's phone still cannot alter or remove her entries.
+     */
+    private fun handleUpsertRequest(endpointId: String, message: PeerMessage) {
+        Log.w(TAG, "Rejecting upsert request for ${message.familyId} - partners cannot write")
     }
 
     private suspend fun handleUpsertBroadcast(message: PeerMessage) {
@@ -437,31 +421,9 @@ class PeerToPeerFamilySyncGateway(
         replaceEntry(message.familyId, entry)
     }
 
-    private suspend fun handleDeleteRequest(endpointId: String, message: PeerMessage) {
-        val hostMembership = membership[message.familyId]
-        if (hostMembership?.isHost != true) {
-            Log.w(TAG, "Ignoring delete request for ${message.familyId} - not host")
-            return
-        }
-        if (hostMembership.secret != message.secret) {
-            Log.w(TAG, "Rejecting delete request: secret mismatch")
-            return
-        }
-        val entryId = message.entryId ?: return
-        removeEntry(message.familyId, entryId)
-        broadcast(
-            PeerMessage(
-                type = PeerMessage.Type.DELETE_BROADCAST,
-                familyId = message.familyId,
-                entryId = entryId,
-            ),
-            excludeEndpoint = endpointId,
-        )
-        sendToEndpoint(endpointId, PeerMessage(
-            type = PeerMessage.Type.DELETE_BROADCAST,
-            familyId = message.familyId,
-            entryId = entryId,
-        ))
+    /** Rejects journal deletions arriving from another device. See [handleUpsertRequest]. */
+    private fun handleDeleteRequest(endpointId: String, message: PeerMessage) {
+        Log.w(TAG, "Rejecting delete request for ${message.familyId} - partners cannot write")
     }
 
     private suspend fun handleDeleteBroadcast(message: PeerMessage) {

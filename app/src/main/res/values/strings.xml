@@ -145,6 +145,9 @@
     <string name="journal_add_entry">Add journal entry</string>
     <string name="journal_empty_title">Capture your journey</string>
     <string name="journal_empty_body">Reflect on how you’re feeling and what you want to remember about this week.</string>
+    <string name="journal_private_label">Keep this entry private</string>
+    <string name="journal_private_description">Private entries stay on this phone and are never shared with your partner.</string>
+    <string name="journal_private_badge">Private</string>
     <string name="journal_partner_blocked_title">Journal not shared yet</string>
     <string name="journal_partner_blocked_body">The expectant parent controls whether journal entries are visible in partner mode.</string>
     <string name="journal_mood_label">Mood: %1$s</string>

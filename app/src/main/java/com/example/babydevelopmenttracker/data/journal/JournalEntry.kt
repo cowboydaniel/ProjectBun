@@ -11,6 +11,8 @@ data class JournalEntryEntity(
     val mood: JournalMood,
     val body: String,
     val attachments: List<String>,
+    /** Private entries stay on this device and are never sent to the family. */
+    val isPrivate: Boolean = false,
 )
 
 data class JournalEntry(
@@ -19,6 +21,7 @@ data class JournalEntry(
     val mood: JournalMood,
     val body: String,
     val attachments: List<String> = emptyList(),
+    val isPrivate: Boolean = false,
 )
 
 fun JournalEntryEntity.toDomain(): JournalEntry =
@@ -28,6 +31,7 @@ fun JournalEntryEntity.toDomain(): JournalEntry =
         mood = mood,
         body = body,
         attachments = attachments,
+        isPrivate = isPrivate,
     )
 
 fun JournalEntry.toEntity(): JournalEntryEntity =
@@ -37,4 +41,5 @@ fun JournalEntry.toEntity(): JournalEntryEntity =
         mood = mood,
         body = body,
         attachments = attachments,
+        isPrivate = isPrivate,
     )

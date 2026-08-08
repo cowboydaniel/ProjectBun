@@ -86,7 +86,8 @@ class JournalRepository(
                 }
                 .getOrNull()
                 .orEmpty()
-            entries.forEach { entity -> pushRemote(entity.toDomain()) }
+            entries.filterNot(JournalEntryEntity::isPrivate)
+                .forEach { entity -> pushRemote(entity.toDomain()) }
         }
     }
 
@@ -100,7 +101,9 @@ class JournalRepository(
                     secret,
                 )
                 transactionRunner {
-                    journalDao.clearAll()
+                    // Only shared entries are replaced by the family's copy. Clearing everything
+                    // would destroy this device's private entries, which the family never holds.
+                    journalDao.clearShared()
                     journalDao.upsert(remoteEntries.map { it.toEntity() })
                 }
             }.onFailure { error ->
@@ -110,6 +113,12 @@ class JournalRepository(
     }
 
     private suspend fun pushRemote(entry: JournalEntry) {
+        if (entry.isPrivate) {
+            // An entry can be made private after it was shared, so withdraw it rather than
+            // leaving the previously published copy in the family store.
+            removeRemote(entry.id)
+            return
+        }
         val familyId = familyIdProvider() ?: return
         val secret = familySecretProvider()?.takeUnless(String::isBlank) ?: return
         runCatching {

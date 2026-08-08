@@ -955,7 +955,11 @@ fun BabyDevelopmentTrackerScreen(
                                         journalDestination = JournalDestination.Editor(null)
                                     },
                                     onEntrySelected = { entry ->
-                                        journalDestination = JournalDestination.Editor(entry.id)
+                                        // The editor saves and deletes, so a partner never opens
+                                        // it; the journal is the expectant parent's to change.
+                                        if (familyRole != FamilyRole.PARTNER_SUPPORTER) {
+                                            journalDestination = JournalDestination.Editor(entry.id)
+                                        }
                                     },
                                     onExport = {
                                         if (journalEntries.isEmpty()) {

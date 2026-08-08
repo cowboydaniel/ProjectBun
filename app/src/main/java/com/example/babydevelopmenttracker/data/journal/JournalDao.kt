@@ -28,4 +28,7 @@ interface JournalDao {
 
     @Query("DELETE FROM journal_entries")
     suspend fun clearAll()
+
+    @Query("DELETE FROM journal_entries WHERE isPrivate = 0")
+    suspend fun clearShared()
 }

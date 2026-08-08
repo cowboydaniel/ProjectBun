@@ -111,7 +111,8 @@ fun JournalListScreen(
             }
         }
 
-        val canCreateEntry = !isPartnerView || canPartnerViewEntries
+        // The journal belongs to the expectant parent, so a partner reads it without an add button.
+        val canCreateEntry = !isPartnerView
         if (canCreateEntry) {
             FloatingActionButton(
                 onClick = onAddEntry,
@@ -157,6 +158,13 @@ private fun JournalEntryCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary
             )
+            if (entry.isPrivate) {
+                Text(
+                    text = stringResource(id = R.string.journal_private_badge),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
                 text = entry.body,
                 style = MaterialTheme.typography.bodyLarge,

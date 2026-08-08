@@ -18,6 +18,7 @@ import com.google.android.gms.nearby.connection.Strategy
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -45,12 +46,14 @@ private val SYNC_TIMEOUT = 10.seconds
 class PeerToPeerFamilySyncGateway(
     private val client: PeerConnectionClient,
     private val moshi: Moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build(),
+    private val storage: JournalStoreStorage = JournalStoreStorage.None,
 ) : FamilySyncGateway, PeerConnectionClient.Listener {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val messageAdapter = moshi.adapter(PeerMessage::class.java)
     private val journalMutex = Mutex()
     private val journalStore = mutableMapOf<String, MutableMap<String, JournalEntryPayload>>()
+    private var storeLoaded = false
     private val pendingRegistrations = ConcurrentHashMap<String, CompletableDeferred<FamilyRegistrationResponse>>()
     private val pendingSyncRequests = ConcurrentHashMap<String, CompletableDeferred<List<JournalEntryPayload>>>()
     private val connectedEndpoints = ConcurrentHashMap<String, PeerEndpoint>()
@@ -136,6 +139,7 @@ class PeerToPeerFamilySyncGateway(
         // single entry it never asked again, and entries written on the other device never arrived.
         if (membership[familyId]?.isHost == true || connectedEndpoints.isEmpty()) {
             val localEntries = journalMutex.withLock {
+                ensureLoadedLocked()
                 journalStore[familyId]?.values?.sortedByDescending { it.timestampEpochMillis }
             }
             if (!localEntries.isNullOrEmpty()) {
@@ -383,6 +387,7 @@ class PeerToPeerFamilySyncGateway(
             return
         }
         val entries = journalMutex.withLock {
+            ensureLoadedLocked()
             journalStore[message.familyId]?.values?.sortedByDescending { it.timestampEpochMillis }
                 ?: emptyList()
         }
@@ -466,26 +471,46 @@ class PeerToPeerFamilySyncGateway(
 
     private suspend fun replaceEntry(familyId: String, entry: JournalEntryPayload) {
         journalMutex.withLock {
+            ensureLoadedLocked()
             val store = ensureFamilyStore(familyId)
             store[entry.id] = entry
+            persistLocked()
         }
         _journalUpdates.emit(JournalUpdate.Upserted(familyId, entry))
     }
 
     private suspend fun removeEntry(familyId: String, entryId: String) {
         journalMutex.withLock {
+            ensureLoadedLocked()
             val store = ensureFamilyStore(familyId)
             store.remove(entryId)
+            persistLocked()
         }
         _journalUpdates.emit(JournalUpdate.Deleted(familyId, entryId))
     }
 
     private suspend fun replaceEntries(familyId: String, entries: List<JournalEntryPayload>) {
         journalMutex.withLock {
+            ensureLoadedLocked()
             val store = ensureFamilyStore(familyId)
             store.clear()
             entries.forEach { entry -> store[entry.id] = entry }
+            persistLocked()
         }
+    }
+
+    /** Reads the persisted store the first time it is needed. Callers must hold [journalMutex]. */
+    private suspend fun ensureLoadedLocked() {
+        if (storeLoaded) return
+        storeLoaded = true
+        storage.load().forEach { (familyId, entries) ->
+            journalStore.getOrPut(familyId) { mutableMapOf() }.putAll(entries)
+        }
+    }
+
+    /** Writes the store back to disk. Callers must hold [journalMutex]. */
+    private suspend fun persistLocked() {
+        storage.save(journalStore.mapValues { (_, entries) -> entries.toMap() })
     }
 
     private fun ensureFamilyStore(familyId: String): MutableMap<String, JournalEntryPayload> {
@@ -584,7 +609,12 @@ class PeerToPeerFamilySyncGateway(
     companion object {
         fun create(context: Context): PeerToPeerFamilySyncGateway {
             val client = NearbyPeerConnectionClient(context)
-            return PeerToPeerFamilySyncGateway(client)
+            val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+            val storage = FileJournalStoreStorage(
+                File(context.filesDir, "family_journal_store.json"),
+                moshi,
+            )
+            return PeerToPeerFamilySyncGateway(client, moshi, storage)
         }
     }
 }

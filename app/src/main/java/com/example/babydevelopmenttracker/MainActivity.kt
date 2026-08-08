@@ -193,10 +193,14 @@ fun BabyDevelopmentTrackerApp() {
             journalDao = journalDatabase.journalDao(),
             familySyncGateway = familySyncGateway,
             familyIdProvider = {
-                userPreferencesRepository.userPreferences.firstOrNull()?.familyLinkId
+                userPreferencesRepository.userPreferences.firstOrNull()
+                    ?.takeIf(::isSharingJournal)
+                    ?.familyLinkId
             },
             familySecretProvider = {
-                userPreferencesRepository.userPreferences.firstOrNull()?.familyLinkSecret
+                userPreferencesRepository.userPreferences.firstOrNull()
+                    ?.takeIf(::isSharingJournal)
+                    ?.familyLinkSecret
             },
             transactionRunner = { block -> journalDatabase.withTransaction { block() } }
         )
@@ -274,7 +278,8 @@ fun BabyDevelopmentTrackerScreen(
     }
 
     val journalEntries by journalRepository.journalEntries.collectAsState(initial = emptyList())
-    val canPartnerViewJournal = partnerLinkApproved && shareJournalWithPartner
+    val canPartnerViewJournal = partnerLinkApproved &&
+        (familyRole == FamilyRole.PARTNER_SUPPORTER || shareJournalWithPartner)
 
     var partnerCodeError by remember { mutableStateOf<String?>(null) }
     var partnerCodeSuccess by remember { mutableStateOf<String?>(null) }
@@ -2661,6 +2666,15 @@ fun PartnerSupportCard(
         }
     }
 }
+
+/**
+ * Whether this device should exchange journal entries.
+ *
+ * The share toggle belongs to the expectant parent. A partner never sets it - their copy stays
+ * false - so requiring it on both sides would stop the partner syncing at all.
+ */
+private fun isSharingJournal(preferences: UserPreferences): Boolean =
+    preferences.familyRole == FamilyRole.PARTNER_SUPPORTER || preferences.shareJournalWithPartner
 
 private fun requiredNearbyPermissions(): Array<String> {
     val permissions = mutableListOf(

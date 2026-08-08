@@ -12,6 +12,8 @@ import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
 import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.nearby.connection.ConnectionsStatusCodes
 import com.google.android.gms.nearby.connection.Strategy
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
@@ -25,6 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -51,6 +54,7 @@ class PeerToPeerFamilySyncGateway(
     private val pendingConnections = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var isAdvertising = false
     @Volatile private var isDiscovering = false
+    @Volatile private var lastError: String? = null
     private var localEndpointName: String = ""
 
     private val membership = ConcurrentHashMap<String, FamilyMembership>()
@@ -89,8 +93,18 @@ class PeerToPeerFamilySyncGateway(
             deviceIdentifier = request.deviceIdentifier,
         )
         if (!sendToHost(message)) {
-            pendingRegistrations.remove(familyId)
-            throw IllegalStateException("No connected host available for registration")
+            // Endpoints discovered before registration started were skipped by the auto-connect
+            // check above, so sweep them now, then give the connection time to establish.
+            discoveredEndpoints.keys.forEach { endpointId -> maybeAutoConnect(endpointId) }
+            val connected = runCatching {
+                withTimeout(REGISTRATION_TIMEOUT.inWholeMilliseconds) {
+                    _connectionState.first { it.connectedEndpoints.isNotEmpty() }
+                }
+            }.isSuccess
+            if (!connected || !sendToHost(message)) {
+                pendingRegistrations.remove(familyId)
+                throw IllegalStateException("No connected host available for registration")
+            }
         }
         val response = withTimeout(REGISTRATION_TIMEOUT.inWholeMilliseconds) { deferred.await() }
         membership[familyId] = FamilyMembership(secret = response.authToken, isHost = false)
@@ -254,6 +268,22 @@ class PeerToPeerFamilySyncGateway(
     override fun onEndpointDisconnected(endpointId: String) {
         connectedEndpoints.remove(endpointId)
         pendingConnections.remove(endpointId)
+        publishState()
+    }
+
+    override fun onOperationFailed(operation: String, error: Throwable) {
+        Log.w(TAG, "Nearby operation failed: $operation", error)
+        // Clear the flag the failed call was supposed to set, otherwise Settings keeps reporting
+        // that we are advertising or discovering while nothing is running.
+        when (operation) {
+            "startAdvertising" -> isAdvertising = false
+            "startDiscovery" -> isDiscovering = false
+        }
+        lastError = buildString {
+            append(operation)
+            append(": ")
+            append(error.message ?: error::class.java.simpleName)
+        }
         publishState()
     }
 
@@ -424,7 +454,11 @@ class PeerToPeerFamilySyncGateway(
     }
 
     private fun shouldAutoConnect(): Boolean {
-        return membership.values.any { !it.isHost }
+        // A device that has already joined reconnects to its host. A device part way through
+        // joining must connect too: its membership is only recorded once registration succeeds,
+        // and registration cannot succeed until it is connected. Without the pending check the
+        // two conditions wait on each other and joining can never complete.
+        return membership.values.any { !it.isHost } || pendingRegistrations.isNotEmpty()
     }
 
     private fun maybeAutoConnect(endpointId: String) {
@@ -446,6 +480,7 @@ class PeerToPeerFamilySyncGateway(
             discovering = isDiscovering,
             discoveredEndpoints = discoveredEndpoints.values.sortedBy { it.name },
             connectedEndpoints = connectedEndpoints.values.sortedBy { it.name },
+            lastError = lastError,
         )
     }
 
@@ -531,6 +566,14 @@ interface PeerConnectionClient {
         fun onEndpointConnected(endpointId: String, name: String)
         fun onEndpointDisconnected(endpointId: String)
         fun onPayloadReceived(endpointId: String, payload: ByteArray)
+
+        /**
+         * Reports a Nearby call that failed. Nearby reports failures on the returned Task rather
+         * than by throwing, so without this every failure - a missing runtime permission, location
+         * services switched off, Wi-Fi unavailable - was dropped silently and the UI went on
+         * claiming it was advertising or discovering.
+         */
+        fun onOperationFailed(operation: String, error: Throwable)
     }
 }
 
@@ -558,6 +601,9 @@ private class NearbyPeerConnectionClient(
         override fun onConnectionInitiated(endpointId: String, info: com.google.android.gms.nearby.connection.ConnectionInfo) {
             endpointNames[endpointId] = info.endpointName
             connectionsClient.acceptConnection(endpointId, payloadCallback)
+                .addOnFailureListener { error ->
+                    listener?.onOperationFailed("acceptConnection", error)
+                }
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
@@ -601,7 +647,11 @@ private class NearbyPeerConnectionClient(
             serviceId,
             connectionLifecycleCallback,
             options,
-        )
+        ).addOnFailureListener { error ->
+            if (!isAlreadyRunning(error)) {
+                listener?.onOperationFailed("startAdvertising", error)
+            }
+        }
     }
 
     override fun stopAdvertising() {
@@ -613,6 +663,11 @@ private class NearbyPeerConnectionClient(
             .setStrategy(Strategy.P2P_POINT_TO_POINT)
             .build()
         connectionsClient.startDiscovery(serviceId, discoveryCallback, options)
+            .addOnFailureListener { error ->
+                if (!isAlreadyRunning(error)) {
+                    listener?.onOperationFailed("startDiscovery", error)
+                }
+            }
     }
 
     override fun stopDiscovery() {
@@ -621,6 +676,9 @@ private class NearbyPeerConnectionClient(
 
     override fun requestConnection(endpointId: String, localEndpointName: String) {
         connectionsClient.requestConnection(localEndpointName, endpointId, connectionLifecycleCallback)
+            .addOnFailureListener { error ->
+                listener?.onOperationFailed("requestConnection", error)
+            }
     }
 
     override fun disconnectEndpoint(endpointId: String) {
@@ -630,6 +688,19 @@ private class NearbyPeerConnectionClient(
 
     override fun sendPayload(endpointId: String, payload: ByteArray) {
         connectionsClient.sendPayload(endpointId, Payload.fromBytes(payload))
+            .addOnFailureListener { error ->
+                listener?.onOperationFailed("sendPayload", error)
+            }
+    }
+
+    /**
+     * Nearby rejects a second start while one is already running. That is the state we wanted, so
+     * it is not worth surfacing as an error.
+     */
+    private fun isAlreadyRunning(error: Throwable): Boolean {
+        val statusCode = (error as? ApiException)?.statusCode
+        return statusCode == ConnectionsStatusCodes.STATUS_ALREADY_ADVERTISING ||
+            statusCode == ConnectionsStatusCodes.STATUS_ALREADY_DISCOVERING
     }
 
     override fun stopAll() {

@@ -72,6 +72,8 @@ data class PeerConnectionState(
     val discovering: Boolean = false,
     val discoveredEndpoints: List<PeerEndpoint> = emptyList(),
     val connectedEndpoints: List<PeerEndpoint> = emptyList(),
+    /** Last Nearby failure, or null. Surfaced so a silent failure is visible in Settings. */
+    val lastError: String? = null,
 )
 
 data class PeerEndpoint(val id: String, val name: String)

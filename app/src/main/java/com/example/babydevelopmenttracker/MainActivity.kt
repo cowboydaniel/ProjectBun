@@ -412,6 +412,12 @@ fun BabyDevelopmentTrackerScreen(
         journalRepository.refreshFromRemote()
     }
 
+    // Apply journal changes pushed from the other device as they arrive, rather than only on the
+    // one-shot refresh above.
+    LaunchedEffect(Unit) {
+        journalRepository.observeRemoteUpdates()
+    }
+
     LaunchedEffect(canPartnerViewJournal, familyRole) {
         if (familyRole == FamilyRole.PARTNER_SUPPORTER && !canPartnerViewJournal) {
             journalDestination = JournalDestination.List

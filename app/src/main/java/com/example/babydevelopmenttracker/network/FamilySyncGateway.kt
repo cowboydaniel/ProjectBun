@@ -1,5 +1,6 @@
 package com.example.babydevelopmenttracker.network
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -7,6 +8,15 @@ import kotlinx.coroutines.flow.StateFlow
  */
 interface FamilySyncGateway {
     val connectionState: StateFlow<PeerConnectionState>
+
+    /**
+     * Journal changes arriving from other devices in the family.
+     *
+     * Incoming changes previously only updated the gateway's own store, which nothing else reads,
+     * so an entry written on one device never reached the other device's database or screen.
+     * Collect this to apply them locally.
+     */
+    val journalUpdates: Flow<JournalUpdate>
 
     suspend fun createFamily(
         familyId: String,
@@ -77,3 +87,12 @@ data class PeerConnectionState(
 )
 
 data class PeerEndpoint(val id: String, val name: String)
+
+/** A journal change received from another device in the family. */
+sealed interface JournalUpdate {
+    val familyId: String
+
+    data class Upserted(override val familyId: String, val entry: JournalEntryPayload) : JournalUpdate
+
+    data class Deleted(override val familyId: String, val entryId: String) : JournalUpdate
+}

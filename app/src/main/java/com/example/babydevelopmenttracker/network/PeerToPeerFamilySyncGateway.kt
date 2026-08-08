@@ -27,6 +27,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -61,6 +65,14 @@ class PeerToPeerFamilySyncGateway(
 
     private val _connectionState = kotlinx.coroutines.flow.MutableStateFlow(PeerConnectionState())
     override val connectionState: kotlinx.coroutines.flow.StateFlow<PeerConnectionState> = _connectionState
+
+    // Replay so an update that lands before the collector attaches is not lost.
+    private val _journalUpdates = MutableSharedFlow<JournalUpdate>(
+        replay = 32,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    override val journalUpdates: SharedFlow<JournalUpdate> = _journalUpdates.asSharedFlow()
 
     init {
         client.setListener(this)
@@ -119,11 +131,16 @@ class PeerToPeerFamilySyncGateway(
         if (membership[familyId]?.secret != secret) {
             membership[familyId] = FamilyMembership(secret = secret, isHost = membership[familyId]?.isHost == true)
         }
-        val localEntries = journalMutex.withLock {
-            journalStore[familyId]?.values?.sortedByDescending { it.timestampEpochMillis }
-        }
-        if (!localEntries.isNullOrEmpty()) {
-            return localEntries
+        // Ask the host first so a refresh actually reconciles. The local cache is only a fallback
+        // for when no host is reachable; returning it up front meant that once this device held a
+        // single entry it never asked again, and entries written on the other device never arrived.
+        if (membership[familyId]?.isHost == true || connectedEndpoints.isEmpty()) {
+            val localEntries = journalMutex.withLock {
+                journalStore[familyId]?.values?.sortedByDescending { it.timestampEpochMillis }
+            }
+            if (!localEntries.isNullOrEmpty()) {
+                return localEntries
+            }
         }
         val deferred = CompletableDeferred<List<JournalEntryPayload>>()
         pendingSyncRequests[familyId] = deferred
@@ -452,6 +469,7 @@ class PeerToPeerFamilySyncGateway(
             val store = ensureFamilyStore(familyId)
             store[entry.id] = entry
         }
+        _journalUpdates.emit(JournalUpdate.Upserted(familyId, entry))
     }
 
     private suspend fun removeEntry(familyId: String, entryId: String) {
@@ -459,6 +477,7 @@ class PeerToPeerFamilySyncGateway(
             val store = ensureFamilyStore(familyId)
             store.remove(entryId)
         }
+        _journalUpdates.emit(JournalUpdate.Deleted(familyId, entryId))
     }
 
     private suspend fun replaceEntries(familyId: String, entries: List<JournalEntryPayload>) {

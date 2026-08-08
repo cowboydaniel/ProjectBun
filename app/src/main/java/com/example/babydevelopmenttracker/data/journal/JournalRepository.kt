@@ -3,6 +3,7 @@ package com.example.babydevelopmenttracker.data.journal
 import android.util.Log
 import com.example.babydevelopmenttracker.network.FamilySyncGateway
 import com.example.babydevelopmenttracker.network.JournalEntryPayload
+import com.example.babydevelopmenttracker.network.JournalUpdate
 import java.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,32 @@ class JournalRepository(
         withContext(ioDispatcher) {
             journalDao.deleteById(entryId)
             removeRemote(entryId)
+        }
+    }
+
+    /**
+     * Applies journal changes arriving from other devices to the local database.
+     *
+     * Never returns; collect it from a scope tied to the screen's lifetime. Without it the gateway
+     * received changes into its own store and nothing else ever saw them.
+     */
+    suspend fun observeRemoteUpdates() {
+        familySyncGateway.journalUpdates.collect { update ->
+            val familyId = familyIdProvider()
+            // Ignore traffic for a family this device is not part of.
+            if (familyId == null || familyId != update.familyId) {
+                return@collect
+            }
+            withContext(ioDispatcher) {
+                runCatching {
+                    when (update) {
+                        is JournalUpdate.Upserted -> journalDao.upsert(update.entry.toEntity())
+                        is JournalUpdate.Deleted -> journalDao.deleteById(update.entryId)
+                    }
+                }.onFailure { error ->
+                    Log.w(JOURNAL_REPOSITORY_TAG, "Failed to apply remote journal update", error)
+                }
+            }
         }
     }
 

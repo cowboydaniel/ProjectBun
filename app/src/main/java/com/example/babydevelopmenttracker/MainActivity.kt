@@ -429,25 +429,43 @@ fun BabyDevelopmentTrackerScreen(
         }
     }
 
-    // The gateway keeps family membership in memory only, while the link itself is persisted.
-    // Restarting the app therefore left a host advertising with no family registered, so every
-    // registration request from a partner was ignored as belonging to someone else. Re-register
-    // the family on start up so the host can answer again.
-    LaunchedEffect(partnerLinkApproved, familyLinkId, familyLinkSecret, familyRole) {
-        if (
-            partnerLinkApproved &&
-            familyRole != FamilyRole.PARTNER_SUPPORTER &&
-            familyLinkId != null &&
-            familyLinkSecret != null
-        ) {
-            runCatching {
-                familySyncGateway.createFamily(
-                    familyLinkId,
-                    CreateFamilyRequest(secret = familyLinkSecret)
-                )
-            }.onFailure { error ->
-                Log.e(FAMILY_SYNC_TAG, "Failed to restore family link", error)
+    // Restores a linked family after the process restarts. Two things were lost on every restart:
+    // the gateway holds membership in memory while the link itself is persisted, so the host had
+    // no family to answer registration requests for; and advertising and discovery were only ever
+    // started from the link toggle and the registration success path, so neither side resumed
+    // looking for the other. Both had to be toggled by hand to reconnect.
+    LaunchedEffect(
+        partnerLinkApproved,
+        familyLinkId,
+        familyLinkSecret,
+        familyRole,
+        nearbyPermissionsGranted,
+    ) {
+        if (!partnerLinkApproved || familyLinkId == null || nearbyPermissionsGranted.not()) {
+            return@LaunchedEffect
+        }
+        if (familyRole == FamilyRole.PARTNER_SUPPORTER) {
+            // A linked partner looks for the host again.
+            ensureNearbyRadios(
+                { familySyncGateway.startDiscovery(deviceEndpointName) },
+                {}
+            )
+        } else {
+            if (familyLinkSecret != null) {
+                runCatching {
+                    familySyncGateway.createFamily(
+                        familyLinkId,
+                        CreateFamilyRequest(secret = familyLinkSecret)
+                    )
+                }.onFailure { error ->
+                    Log.e(FAMILY_SYNC_TAG, "Failed to restore family link", error)
+                }
             }
+            // A linked host makes itself findable again.
+            ensureNearbyRadios(
+                { familySyncGateway.startAdvertising(deviceEndpointName) },
+                {}
+            )
         }
     }
 

@@ -69,6 +69,27 @@ class JournalRepository(
         }
     }
 
+    /**
+     * Pushes every local entry into the shared store.
+     *
+     * A host that already kept a journal before linking had none of it in the shared store, since
+     * entries are only pushed as they are written. Without this the partner joined to an empty
+     * journal and only ever saw entries written after the link was made.
+     */
+    suspend fun publishAllToRemote() {
+        withContext(ioDispatcher) {
+            familyIdProvider() ?: return@withContext
+            familySecretProvider()?.takeUnless(String::isBlank) ?: return@withContext
+            val entries = runCatching { journalDao.getAllEntries() }
+                .onFailure { error ->
+                    Log.w(JOURNAL_REPOSITORY_TAG, "Failed to read entries to publish", error)
+                }
+                .getOrNull()
+                .orEmpty()
+            entries.forEach { entity -> pushRemote(entity.toDomain()) }
+        }
+    }
+
     suspend fun refreshFromRemote() {
         withContext(ioDispatcher) {
             val familyId = familyIdProvider() ?: return@withContext

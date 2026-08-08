@@ -423,6 +423,21 @@ fun BabyDevelopmentTrackerScreen(
         journalRepository.observeRemoteUpdates()
     }
 
+    // The refresh above runs at start up, usually before either device has found the other, so it
+    // finds no host and gives up. Sync again once a peer is actually connected, otherwise a
+    // partner sees nothing until the host happens to write a new entry.
+    val hasConnectedPeer = connectionState.connectedEndpoints.isNotEmpty()
+    LaunchedEffect(hasConnectedPeer, familyRole) {
+        if (!hasConnectedPeer) return@LaunchedEffect
+        if (familyRole == FamilyRole.PARTNER_SUPPORTER) {
+            journalRepository.refreshFromRemote()
+        } else {
+            // Entries are only pushed as they are written, so anything the host wrote before
+            // linking is missing from the shared store the partner syncs against.
+            journalRepository.publishAllToRemote()
+        }
+    }
+
     LaunchedEffect(canPartnerViewJournal, familyRole) {
         if (familyRole == FamilyRole.PARTNER_SUPPORTER && !canPartnerViewJournal) {
             journalDestination = JournalDestination.List

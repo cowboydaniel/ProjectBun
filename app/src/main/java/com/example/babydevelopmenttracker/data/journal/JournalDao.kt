@@ -11,6 +11,9 @@ interface JournalDao {
     @Query("SELECT * FROM journal_entries ORDER BY timestamp DESC")
     fun getEntries(): Flow<List<JournalEntryEntity>>
 
+    @Query("SELECT * FROM journal_entries ORDER BY timestamp DESC")
+    suspend fun getAllEntries(): List<JournalEntryEntity>
+
     @Query("SELECT * FROM journal_entries WHERE id = :id LIMIT 1")
     suspend fun getEntryById(id: String): JournalEntryEntity?
 

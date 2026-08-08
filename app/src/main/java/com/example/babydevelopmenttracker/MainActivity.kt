@@ -441,7 +441,7 @@ fun BabyDevelopmentTrackerScreen(
             userPreferencesRepository.updateFamilyLink(familyId, response.authToken)
             userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite = true)
             if (remindersEnabled) {
-                reminderScheduler.scheduleWeeklyReminder(epochDay)
+                reminderScheduler.rescheduleNow(epochDay)
             }
             userPreferencesRepository.updatePartnerLinkApproved(true)
             familySyncGateway.stopAdvertising()
@@ -593,7 +593,7 @@ fun BabyDevelopmentTrackerScreen(
 
     LaunchedEffect(remindersEnabled, dueDateEpochDay) {
         if (remindersEnabled) {
-            reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
+            reminderScheduler.ensureScheduled(dueDateEpochDay)
         } else {
             reminderScheduler.cancelWeeklyReminder()
         }
@@ -617,7 +617,7 @@ fun BabyDevelopmentTrackerScreen(
             showPermissionRationale = false
             scope.launch {
                 userPreferencesRepository.updateReminderEnabled(true)
-                reminderScheduler.scheduleWeeklyReminder(userPreferences.dueDateEpochDay)
+                reminderScheduler.ensureScheduled(userPreferences.dueDateEpochDay)
             }
             Unit
         } else {
@@ -640,7 +640,7 @@ fun BabyDevelopmentTrackerScreen(
                 showPermissionRationale = false
                 scope.launch {
                     userPreferencesRepository.updateReminderEnabled(true)
-                    reminderScheduler.scheduleWeeklyReminder(dueDateEpochDay)
+                    reminderScheduler.ensureScheduled(dueDateEpochDay)
                 }
                 Unit
             }
@@ -754,7 +754,7 @@ fun BabyDevelopmentTrackerScreen(
                     val epochDay = date.toEpochDay()
                     userPreferencesRepository.updateDueDate(epochDay, fromPartnerInvite)
                     if (remindersEnabled) {
-                        reminderScheduler.scheduleWeeklyReminder(epochDay)
+                        reminderScheduler.rescheduleNow(epochDay)
                     }
                 }
                 Unit
@@ -1075,7 +1075,7 @@ fun BabyDevelopmentTrackerScreen(
                                     val epochDay = selectedDate.toEpochDay()
                                     userPreferencesRepository.updateDueDate(epochDay)
                                     if (remindersEnabled) {
-                                        reminderScheduler.scheduleWeeklyReminder(epochDay)
+                                        reminderScheduler.rescheduleNow(epochDay)
                                     }
                                 }
                                 Unit

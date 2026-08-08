@@ -17,6 +17,7 @@ import com.example.babydevelopmenttracker.model.BabyDevelopmentRepository
 import com.example.babydevelopmenttracker.model.calculateWeekFromDueDate
 import com.example.babydevelopmenttracker.model.findWeek
 import kotlinx.coroutines.flow.first
+import java.io.IOException
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -26,18 +27,32 @@ class WeeklyReminderWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        val preferences = applicationContext.userPreferencesDataStore.data.first()
-        val remindersEnabled = preferences[UserPreferencesKeys.REMINDER_ENABLED] ?: false
-        if (!remindersEnabled) {
-            return Result.success()
-        }
-
-        val notificationManager = NotificationManagerCompat.from(applicationContext)
-        if (!notificationManager.areNotificationsEnabled()) {
-            return Result.success()
+        // Reading preferences can fail transiently (for example if the DataStore file is being
+        // migrated). Retrying rather than throwing keeps the reminder chain alive - an uncaught
+        // failure here would end it permanently, with no further reminders until the app is
+        // reopened.
+        val preferences = try {
+            applicationContext.userPreferencesDataStore.data.first()
+        } catch (error: IOException) {
+            return Result.retry()
         }
 
         val dueDateEpochDay = preferences[UserPreferencesKeys.DUE_DATE_EPOCH_DAY]
+
+        val remindersEnabled = preferences[UserPreferencesKeys.REMINDER_ENABLED] ?: false
+        if (!remindersEnabled) {
+            // Do not re-arm: the settings toggle owns scheduling and cancelled this chain.
+            return Result.success()
+        }
+
+        // Every path from here re-arms next week's run before returning, so a week that cannot
+        // deliver does not silently end the chain.
+        val notificationManager = NotificationManagerCompat.from(applicationContext)
+        if (!notificationManager.areNotificationsEnabled()) {
+            scheduleNextRun(dueDateEpochDay)
+            return Result.success()
+        }
+
         val zoneId = ZoneId.systemDefault()
         val today = LocalDate.now(zoneId)
         val dueDate = dueDateEpochDay?.let(LocalDate::ofEpochDay)
@@ -76,8 +91,20 @@ class WeeklyReminderWorker(
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        notificationManager.notify(WEEKLY_REMINDER_NOTIFICATION_ID, notification)
+        try {
+            notificationManager.notify(WEEKLY_REMINDER_NOTIFICATION_ID, notification)
+        } catch (error: SecurityException) {
+            // POST_NOTIFICATIONS was revoked after the work was enqueued. Keep the chain alive so
+            // reminders resume if the permission is granted again.
+            scheduleNextRun(dueDateEpochDay)
+            return Result.success()
+        }
 
+        scheduleNextRun(dueDateEpochDay)
         return Result.success()
+    }
+
+    private fun scheduleNextRun(dueDateEpochDay: Long?) {
+        WeeklyReminderScheduler(applicationContext).scheduleNextAfterRun(dueDateEpochDay)
     }
 }

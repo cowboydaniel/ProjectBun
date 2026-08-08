@@ -28,6 +28,7 @@ internal object UserPreferencesKeys {
     val SHARE_JOURNAL_WITH_PARTNER = booleanPreferencesKey("share_journal_with_partner")
     val FAMILY_LINK_ID = stringPreferencesKey("family_link_id")
     val FAMILY_LINK_SECRET = stringPreferencesKey("family_link_secret")
+    val DISPLAY_NAME = stringPreferencesKey("display_name")
 }
 
 data class UserPreferences(
@@ -41,6 +42,7 @@ data class UserPreferences(
     val shareJournalWithPartner: Boolean = false,
     val familyLinkId: String? = null,
     val familyLinkSecret: String? = null,
+    val displayName: String? = null,
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -62,6 +64,7 @@ class UserPreferencesRepository(private val context: Context) {
                     preferences[UserPreferencesKeys.SHARE_JOURNAL_WITH_PARTNER] ?: false,
                 familyLinkId = preferences[UserPreferencesKeys.FAMILY_LINK_ID],
                 familyLinkSecret = preferences[UserPreferencesKeys.FAMILY_LINK_SECRET],
+                displayName = preferences[UserPreferencesKeys.DISPLAY_NAME],
             )
         }
 
@@ -117,6 +120,18 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
+    /** Stores the name shown in the home greeting. Blank input clears it. */
+    suspend fun updateDisplayName(name: String?) {
+        context.userPreferencesDataStore.edit { preferences ->
+            val trimmed = name?.trim()
+            if (trimmed.isNullOrEmpty()) {
+                preferences.remove(UserPreferencesKeys.DISPLAY_NAME)
+            } else {
+                preferences[UserPreferencesKeys.DISPLAY_NAME] = trimmed.take(MAX_DISPLAY_NAME_LENGTH)
+            }
+        }
+    }
+
     suspend fun updateFamilyLink(familyId: String?, familySecret: String?) {
         context.userPreferencesDataStore.edit { preferences ->
             if (familyId.isNullOrEmpty()) {
@@ -133,4 +148,8 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
+
+    private companion object {
+        const val MAX_DISPLAY_NAME_LENGTH = 40
+    }
 }

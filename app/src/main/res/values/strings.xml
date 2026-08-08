@@ -113,6 +113,11 @@
     <string name="partner_baby_overview_default">Baby keeps growing stronger and more active this week.</string>
     <string name="onboarding_welcome_title">Let’s get to know you</string>
     <string name="onboarding_welcome_subtitle">We’ll personalize your experience in three quick steps.</string>
+    <string name="onboarding_name_prompt">What should we call you?</string>
+    <string name="onboarding_name_placeholder">Your first name</string>
+    <string name="onboarding_name_hint">Optional. You can change or remove it anytime in Settings.</string>
+    <string name="settings_name_title">Your name</string>
+    <string name="settings_name_description">Used to greet you on the home screen.</string>
     <string name="onboarding_role_prompt">How are you connected to this pregnancy?</string>
     <string name="onboarding_due_date_title">When is baby expected to arrive?</string>
     <string name="onboarding_due_date_description">Pick a due date so we can jump straight to the right week.</string>

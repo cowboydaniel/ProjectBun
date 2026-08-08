@@ -101,6 +101,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
@@ -251,6 +252,7 @@ fun BabyDevelopmentTrackerScreen(
     val dueDateEpochDay = userPreferences.dueDateEpochDay
     val remindersEnabled = userPreferences.remindersEnabled
     val familyRole = userPreferences.familyRole
+    val displayName = userPreferences.displayName
     val onboardingCompleted = userPreferences.onboardingCompleted
     val themePreference = userPreferences.themePreference
     val dueDateFromPartnerInvite = userPreferences.dueDateFromPartnerInvite
@@ -737,6 +739,10 @@ fun BabyDevelopmentTrackerScreen(
     if (!onboardingCompleted) {
         OnboardingFlow(
             familyRole = familyRole,
+            displayName = displayName,
+            onDisplayNameChange = { name ->
+                scope.launch { userPreferencesRepository.updateDisplayName(name) }
+            },
             dueDate = dueDate,
             zoneId = zoneId,
             today = today,
@@ -867,6 +873,7 @@ fun BabyDevelopmentTrackerScreen(
                         dateFormatter = dateFormatter,
                         calculatedWeek = calculatedWeek,
                         familyRole = familyRole,
+                        displayName = displayName,
                         remindersEnabled = remindersEnabled
                     )
                     DrawerDestination.Journal -> {
@@ -1109,6 +1116,7 @@ private fun HomeContent(
     dateFormatter: DateTimeFormatter,
     calculatedWeek: Int?,
     familyRole: FamilyRole?,
+    displayName: String?,
     remindersEnabled: Boolean,
 ) {
     val weekInfo = remember(selectedWeek) { BabyDevelopmentRepository.findWeek(selectedWeek) }
@@ -1132,10 +1140,11 @@ private fun HomeContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                familyRole?.let { role ->
-                    val roleLabel = stringResource(id = role.labelRes)
+                val greetingName = displayName?.takeIf { it.isNotBlank() }
+                    ?: familyRole?.let { stringResource(id = it.labelRes) }
+                greetingName?.let { name ->
                     Text(
-                        text = stringResource(id = R.string.home_greeting, roleLabel),
+                        text = stringResource(id = R.string.home_greeting, name),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -2038,6 +2047,8 @@ private fun FamilyRoleOptionCard(
 @Composable
 private fun OnboardingFlow(
     familyRole: FamilyRole?,
+    displayName: String?,
+    onDisplayNameChange: (String) -> Unit,
     dueDate: LocalDate?,
     zoneId: ZoneId,
     today: LocalDate,
@@ -2057,6 +2068,7 @@ private fun OnboardingFlow(
     val context = LocalContext.current
     var step by remember { mutableStateOf(0) }
     var selectedRole by remember(familyRole) { mutableStateOf(familyRole) }
+    var nameInput by rememberSaveable(displayName) { mutableStateOf(displayName.orEmpty()) }
     val isPartnerRoleSelected = selectedRole == FamilyRole.PARTNER_SUPPORTER
     val totalSteps = if (isPartnerRoleSelected) 4 else 3
 
@@ -2130,6 +2142,33 @@ private fun OnboardingFlow(
                     Text(
                         text = stringResource(id = R.string.onboarding_welcome_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = stringResource(id = R.string.onboarding_name_prompt),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { value ->
+                            nameInput = value
+                            onDisplayNameChange(value)
+                        },
+                        label = { Text(text = stringResource(id = R.string.onboarding_name_placeholder)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Done
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                    )
+                    Text(
+                        text = stringResource(id = R.string.onboarding_name_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp)
                     )
                     Spacer(modifier = Modifier.height(24.dp))

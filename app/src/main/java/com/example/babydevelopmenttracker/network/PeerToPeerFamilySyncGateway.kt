@@ -69,6 +69,8 @@ class PeerToPeerFamilySyncGateway(
     private val _connectionState = kotlinx.coroutines.flow.MutableStateFlow(PeerConnectionState())
     override val connectionState: kotlinx.coroutines.flow.StateFlow<PeerConnectionState> = _connectionState
 
+    // Fed only from the broadcast handlers, so it always means "another device changed this".
+    // Emitting on local writes too made a device apply its own changes back to its database.
     // Replay so an update that lands before the collector attaches is not lost.
     private val _journalUpdates = MutableSharedFlow<JournalUpdate>(
         replay = 32,
@@ -419,6 +421,7 @@ class PeerToPeerFamilySyncGateway(
     private suspend fun handleUpsertBroadcast(message: PeerMessage) {
         val entry = message.entry ?: return
         replaceEntry(message.familyId, entry)
+        _journalUpdates.emit(JournalUpdate.Upserted(message.familyId, entry))
     }
 
     /** Rejects journal deletions arriving from another device. See [handleUpsertRequest]. */
@@ -429,6 +432,7 @@ class PeerToPeerFamilySyncGateway(
     private suspend fun handleDeleteBroadcast(message: PeerMessage) {
         val entryId = message.entryId ?: return
         removeEntry(message.familyId, entryId)
+        _journalUpdates.emit(JournalUpdate.Deleted(message.familyId, entryId))
     }
 
     private suspend fun replaceEntry(familyId: String, entry: JournalEntryPayload) {
@@ -438,7 +442,6 @@ class PeerToPeerFamilySyncGateway(
             store[entry.id] = entry
             persistLocked()
         }
-        _journalUpdates.emit(JournalUpdate.Upserted(familyId, entry))
     }
 
     private suspend fun removeEntry(familyId: String, entryId: String) {
@@ -448,7 +451,6 @@ class PeerToPeerFamilySyncGateway(
             store.remove(entryId)
             persistLocked()
         }
-        _journalUpdates.emit(JournalUpdate.Deleted(familyId, entryId))
     }
 
     private suspend fun replaceEntries(familyId: String, entries: List<JournalEntryPayload>) {
